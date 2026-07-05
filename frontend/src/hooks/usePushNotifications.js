@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { fetchFCMToken, onForegroundMessage } from '../services/firebase';
 
 export function usePushNotifications(socket, session) {
@@ -9,6 +9,7 @@ export function usePushNotifications(socket, session) {
   const [pushLoading, setPushLoading] = useState(false);
   const [pushError, setPushError] = useState(null);
   const [isMockToken, setIsMockToken] = useState(false);
+  const hasAttemptedRef = useRef(false);
 
   const registerTokenWithServer = useCallback(
     (token) => {
@@ -22,6 +23,7 @@ export function usePushNotifications(socket, session) {
 
   const requestPermissionAndRegister = useCallback(async () => {
     if (typeof Notification === 'undefined') return null;
+    hasAttemptedRef.current = true;
 
     try {
       const perm = await Notification.requestPermission();
@@ -33,11 +35,11 @@ export function usePushNotifications(socket, session) {
         const res = await fetchFCMToken();
         setPushLoading(false);
 
-        if (res.error) {
+        if (res?.error) {
           setPushError(res.error);
           return null;
         }
-        if (res.token) {
+        if (res?.token) {
           setFcmToken(res.token);
           setIsMockToken(!!res.isMock);
           registerTokenWithServer(res.token);
@@ -52,12 +54,13 @@ export function usePushNotifications(socket, session) {
     return null;
   }, [registerTokenWithServer]);
 
-  // Auto-register if permission is already granted
+  // Auto-register if permission is already granted (only once per session)
   useEffect(() => {
-    if (permission === 'granted' && socket && session && !fcmToken && !pushLoading) {
+    if (permission === 'granted' && socket && session && !fcmToken && !pushLoading && !pushError && !hasAttemptedRef.current) {
+      hasAttemptedRef.current = true;
       requestPermissionAndRegister();
     }
-  }, [permission, socket, session, fcmToken, pushLoading, requestPermissionAndRegister]);
+  }, [permission, socket, session, fcmToken, pushLoading, pushError, requestPermissionAndRegister]);
 
   // Listen for foreground notifications
   useEffect(() => {

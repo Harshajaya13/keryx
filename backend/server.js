@@ -291,21 +291,19 @@ io.on('connection', (socket) => {
       sendAdminNotification(`🚨 Emergency message sent by ${socket.userName} on Keryx!`);
     }
 
-    if (!targetSocketId) {
-      const partnerToken = db.getFcmTokenForUser(getOtherUserName(socket));
-      if (partnerToken) {
-        sendPushNotification(partnerToken, {
-          title: msg.isEmergency ? `🚨 EMERGENCY from ${socket.userName}` : `Message from ${socket.userName}`,
-          body: trimmedText,
-          data: {
-            type: 'chat',
-            roomCode: socket.roomCode,
-            from: socket.userName,
-            messageId: message.id,
-            time: String(message.time),
-          },
-        });
-      }
+    const partnerToken = db.getFcmTokenForUser(getOtherUserName(socket));
+    if (partnerToken) {
+      sendPushNotification(partnerToken, {
+        title: msg.isEmergency ? `🚨 EMERGENCY from ${socket.userName}` : `Message from ${socket.userName}`,
+        body: trimmedText,
+        data: {
+          type: 'chat',
+          roomCode: socket.roomCode,
+          from: socket.userName,
+          messageId: message.id,
+          time: String(message.time),
+        },
+      });
     }
   });
 
@@ -338,22 +336,22 @@ io.on('connection', (socket) => {
     const target = getOtherSocket(socket);
     if (target) {
       io.to(target).emit('incoming-call', { from: socket.userName, offer: data.offer, isEmergency: data.isEmergency });
-    } else {
-      const partnerToken = db.getFcmTokenForUser(getOtherUserName(socket));
-      if (partnerToken) {
-        console.log(`Waking partner for voice call from ${socket.userName}`);
-        sendPushNotification(partnerToken, {
-          title: data.isEmergency ? `🚨 EMERGENCY VOICE CALL` : `📞 Incoming Voice Call`,
-          body: `${socket.userName} is calling you on Keryx!`,
-          data: {
-            type: 'call',
-            roomCode: socket.roomCode,
-            from: socket.userName,
-            isEmergency: data.isEmergency ? 'true' : 'false',
-            offer: JSON.stringify(data.offer),
-          },
-        });
-      }
+    }
+
+    const partnerToken = db.getFcmTokenForUser(getOtherUserName(socket));
+    if (partnerToken) {
+      console.log(`Waking partner via push notification for voice call from ${socket.userName}`);
+      sendPushNotification(partnerToken, {
+        title: data.isEmergency ? `🚨 EMERGENCY VOICE CALL` : `📞 Incoming Voice Call`,
+        body: `${socket.userName} is calling you on Keryx!`,
+        data: {
+          type: 'call',
+          roomCode: socket.roomCode,
+          from: socket.userName,
+          isEmergency: data.isEmergency ? 'true' : 'false',
+          offer: JSON.stringify(data.offer),
+        },
+      });
     }
   });
 

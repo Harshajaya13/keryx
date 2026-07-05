@@ -227,24 +227,12 @@ export function useSocket(serverUrl, session) {
     }
   }, [connected, offlineQueue]);
 
-  // ── Idle Sleep & Reconnect Logic ─────────────────────
+  // ── Reconnect & Sync on Visibility/Online ────────────
   useEffect(() => {
     if (!session?.token) return;
-    let sleepTimer = null;
 
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'hidden') {
-        if (callState === 'idle') {
-          sleepTimer = setTimeout(() => {
-            if (socketRef.current && socketRef.current.connected) {
-              console.log('💤 App idle in background. Disconnecting socket to save battery.');
-              socketRef.current.disconnect();
-              setIsSleeping(true);
-            }
-          }, 15000);
-        }
-      } else if (document.visibilityState === 'visible') {
-        if (sleepTimer) clearTimeout(sleepTimer);
+      if (document.visibilityState === 'visible') {
         if (socketRef.current && (!socketRef.current.connected || isSleeping)) {
           console.log('☀️ App woken up. Reconnecting socket and syncing...');
           socketRef.current.connect();
@@ -268,11 +256,10 @@ export function useSocket(serverUrl, session) {
     window.addEventListener('online', handleOnline);
 
     return () => {
-      if (sleepTimer) clearTimeout(sleepTimer);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('online', handleOnline);
     };
-  }, [session, callState, isSleeping, syncFromRest]);
+  }, [session, isSleeping, syncFromRest]);
 
   // ── Unread Message Tracking ──────────────────────────
   const markAsRead = useCallback(() => {

@@ -68,28 +68,46 @@ async function sendPushNotification(fcmToken, { title, body, data = {} }) {
   try {
     const message = {
       token: fcmToken,
-      notification: {
-        title,
-        body,
+      // Data-only message: bypasses Android notification grouping and goes straight to service worker
+      data: {
+        ...stringifiedData,
+        title: title,
+        body: body,
       },
-      data: stringifiedData,
       android: {
         priority: 'high',
+        ttl: 0, // Deliver immediately, do not batch
+        directBootOk: true, // Deliver even if phone has not been unlocked since reboot
         notification: {
+          title,
+          body,
           sound: 'default',
           channelId: 'keryx-emergency',
           priority: 'max',
+          visibility: 'public', // Show full content on lock screen
           defaultSound: true,
           defaultVibrateTimings: true,
+          notificationCount: 1,
         },
       },
       webpush: {
         headers: {
           Urgency: 'high',
+          TTL: '0',
+          Topic: stringifiedData.type === 'call' ? 'keryx-call' : 'keryx-msg',
         },
         notification: {
+          title,
+          body,
+          icon: '/icons/icon-192.png',
+          badge: '/icons/icon-192.png',
           requireInteraction: true,
           vibrate: [200, 100, 200, 100, 200, 100, 400],
+          renotify: true,
+          tag: stringifiedData.type === 'call' ? 'keryx-call' : 'keryx-msg-' + Date.now(),
+        },
+        fcmOptions: {
+          link: '/',
         },
       },
     };

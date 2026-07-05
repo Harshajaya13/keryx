@@ -9,6 +9,76 @@ export default function CallScreen({ callState, otherName, onAnswer, onReject, o
     return () => clearInterval(t);
   }, [callState]);
 
+  // Play ringing sound and show OS notification for incoming calls
+  useEffect(() => {
+    if (callState !== 'incoming') return;
+    let audioCtx = null;
+    let intervalId = null;
+
+    try {
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      if (AudioContext) {
+        audioCtx = new AudioContext();
+        
+        const playRingTone = () => {
+          if (audioCtx.state === 'suspended') audioCtx.resume();
+          const now = audioCtx.currentTime;
+          
+          // First beep (440Hz + 480Hz classic phone ring)
+          const osc1 = audioCtx.createOscillator();
+          const osc2 = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          
+          osc1.type = 'sine'; osc1.frequency.setValueAtTime(440, now);
+          osc2.type = 'sine'; osc2.frequency.setValueAtTime(480, now);
+          
+          gain.gain.setValueAtTime(0.15, now);
+          gain.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
+          
+          osc1.connect(gain); osc2.connect(gain); gain.connect(audioCtx.destination);
+          osc1.start(now); osc2.start(now);
+          osc1.stop(now + 0.4); osc2.stop(now + 0.4);
+          
+          // Second beep
+          const osc3 = audioCtx.createOscillator();
+          const osc4 = audioCtx.createOscillator();
+          const gain2 = audioCtx.createGain();
+          
+          osc3.type = 'sine'; osc3.frequency.setValueAtTime(440, now + 0.5);
+          osc4.type = 'sine'; osc4.frequency.setValueAtTime(480, now + 0.5);
+          
+          gain2.gain.setValueAtTime(0.15, now + 0.5);
+          gain2.gain.exponentialRampToValueAtTime(0.01, now + 0.9);
+          
+          osc3.connect(gain2); osc4.connect(gain2); gain2.connect(audioCtx.destination);
+          osc3.start(now + 0.5); osc4.start(now + 0.5);
+          osc3.stop(now + 0.9); osc4.stop(now + 0.9);
+        };
+
+        playRingTone();
+        intervalId = setInterval(playRingTone, 3000);
+      }
+    } catch (e) {
+      console.warn('Audio ringtone error:', e);
+    }
+
+    // Trigger OS notification if out of tab
+    if (typeof Notification !== 'undefined' && Notification.permission === 'granted' && document.visibilityState === 'hidden') {
+      try {
+        new Notification(`📞 Incoming Voice Call`, {
+          body: `${otherName} is calling you on Keryx! Click to answer.`,
+          icon: '/icons/icon-192.png',
+          requireInteraction: true,
+        });
+      } catch (e) {}
+    }
+
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+      if (audioCtx) audioCtx.close().catch(() => {});
+    };
+  }, [callState, otherName]);
+
   const formatTime = (s) => {
     const m = Math.floor(s / 60);
     const sec = s % 60;

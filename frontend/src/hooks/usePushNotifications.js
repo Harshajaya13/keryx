@@ -62,10 +62,25 @@ export function usePushNotifications(socket, session) {
     }
   }, [permission, socket, session, fcmToken, pushLoading, pushError, requestPermissionAndRegister]);
 
-  // Listen for foreground notifications
+  // Listen for foreground notifications and show OS banner if tab is hidden or if it is a call
   useEffect(() => {
     const unsubscribe = onForegroundMessage((payload) => {
       console.log('🔔 Foreground message:', payload);
+      if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+        if (document.visibilityState === 'hidden' || payload.data?.type === 'call') {
+          try {
+            const title = payload.notification?.title || 'Keryx Alert';
+            const options = {
+              body: payload.notification?.body || 'Tap to open family channel.',
+              icon: '/icons/icon-192.png',
+              requireInteraction: true,
+            };
+            new Notification(title, options);
+          } catch (e) {
+            console.warn('Could not display Notification:', e);
+          }
+        }
+      }
     });
     return () => unsubscribe();
   }, []);

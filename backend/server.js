@@ -204,9 +204,13 @@ io.on('connection', (socket) => {
     const code = 'FAMILY';
     const room = rooms[code];
 
-    if (Object.keys(room.users).length >= 2 && !room.users[socket.id]) {
-      socket.emit('join-error', 'Room is full (max 2 people)');
-      return;
+    // Clean up any lingering socket IDs for this same user identity
+    for (const [existingSid, name] of Object.entries(room.users)) {
+      if (name === userName && existingSid !== socket.id) {
+        delete room.users[existingSid];
+        const oldSocket = io.sockets.sockets.get(existingSid);
+        if (oldSocket) oldSocket.leave(code);
+      }
     }
 
     socket.join(code);

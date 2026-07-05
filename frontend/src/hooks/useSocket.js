@@ -9,6 +9,52 @@ const ICE_SERVERS = {
   ],
 };
 
+// Helper: generate a sweet 2-note message notification chime WAV in memory
+const createMessageChimeWavUrl = () => {
+  const sampleRate = 22050;
+  const duration = 0.4;
+  const numSamples = Math.floor(sampleRate * duration);
+  const buffer = new ArrayBuffer(44 + numSamples * 2);
+  const view = new DataView(buffer);
+
+  const writeString = (offset, string) => {
+    for (let i = 0; i < string.length; i++) {
+      view.setUint8(offset + i, string.charCodeAt(i));
+    }
+  };
+  writeString(0, 'RIFF');
+  view.setUint32(4, 36 + numSamples * 2, true);
+  writeString(8, 'WAVE');
+  writeString(12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  writeString(36, 'data');
+  view.setUint32(40, numSamples * 2, true);
+
+  for (let i = 0; i < numSamples; i++) {
+    const t = i / sampleRate;
+    let sample = 0;
+    if (t < 0.12) {
+      const env = Math.sin((t / 0.12) * Math.PI);
+      sample = 0.25 * Math.sin(2 * Math.PI * 659 * t) * env; // E5
+    } else {
+      const t2 = t - 0.12;
+      const env = Math.max(0, 1 - t2 / 0.28);
+      sample = 0.3 * Math.sin(2 * Math.PI * 880 * t) * (env * env); // A5
+    }
+    const intSample = Math.max(-32768, Math.min(32767, Math.floor(sample * 32767)));
+    view.setInt16(44 + i * 2, intSample, true);
+  }
+
+  const blob = new Blob([buffer], { type: 'audio/wav' });
+  return URL.createObjectURL(blob);
+};
+
 export function useSocket(serverUrl, session) {
   const socketRef = useRef(null);
   const pcRef = useRef(null);
@@ -137,8 +183,41 @@ export function useSocket(serverUrl, session) {
     socket.on('call-logs-update', (logs) => setCallLogs(logs));
     socket.on('chat-message', (msg) => {
       setMessages((prev) => [...prev, msg]);
-      if (msg.from !== session.userName && document.visibilityState === 'visible') {
-        socket.emit('message-read');
+      if (msg.from !== session.userName) {
+        if (document.visibilityState === 'visible') {
+          socket.emit('message-read');
+        }
+
+        // Play sweet notification chime!
+        try {
+          const chime = new Audio(createMessageChimeWavUrl());
+          chime.volume = 0.75;
+          chime.play().catch(() => {});
+        } catch (e) {}
+
+        // Trigger reliable OS/system notification if tab is in background or minimized
+        if (typeof Notification !== 'undefined' && Notification.permission === 'granted' && document.visibilityState === 'hidden') {
+          const title = msg.isEmergency ? `🚨 EMERGENCY MESSAGE from ${msg.from}` : `💬 Message from ${msg.from}`;
+          const bodyText = msg.text ? (msg.text.length > 60 ? msg.text.slice(0, 60) + '…' : msg.text) : 'Sent an attachment';
+          const options = {
+            body: bodyText,
+            icon: '/icons/icon-192.png',
+            badge: '/icons/icon-192.png',
+            requireInteraction: msg.isEmergency ? true : false,
+            vibrate: msg.isEmergency ? [400, 200, 400, 200, 400] : [200, 100, 200],
+            tag: 'keryx-msg-' + Date.now(),
+          };
+
+          if ('serviceWorker' in navigator && navigator.serviceWorker.ready) {
+            navigator.serviceWorker.ready.then((reg) => {
+              reg.showNotification(title, options);
+            }).catch(() => {
+              try { new Notification(title, options); } catch (e) {}
+            });
+          } else {
+            try { new Notification(title, options); } catch (e) {}
+          }
+        }
       }
     });
 

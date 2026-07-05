@@ -18,22 +18,34 @@ export function useSocket(serverUrl, session) {
   const [connected, setConnected] = useState(false);
   const [isSleeping, setIsSleeping] = useState(false);
   const [otherUser, setOtherUser] = useState(null);
+  const [partnerPresence, setPartnerPresence] = useState(null);
   const [messages, setMessages] = useState([]);
+  const [callLogs, setCallLogs] = useState([]);
   const [callState, setCallState] = useState('idle');
+  const [isEmergencyCall, setIsEmergencyCall] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [incomingOffer, setIncomingOffer] = useState(null);
   const [joinError, setJoinError] = useState(null);
+  const [callError, setCallError] = useState(null);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [partnerTyping, setPartnerTyping] = useState(false);
 
   const { permission, requestPermissionAndRegister } = usePushNotifications(socketRef.current, session);
 
-  const syncMessagesFromRest = useCallback(async () => {
+  const syncFromRest = useCallback(async () => {
     if (!session?.roomCode) return;
     try {
-      const res = await fetch(`${serverUrl}/api/room/${session.roomCode}/messages`);
-      if (res.ok) {
-        const data = await res.json();
+      const [msgRes, callRes] = await Promise.all([
+        fetch(`${serverUrl}/api/room/${session.roomCode}/messages`),
+        fetch(`${serverUrl}/api/room/${session.roomCode}/calls`),
+      ]);
+      if (msgRes.ok) {
+        const data = await msgRes.json();
         if (data.messages) setMessages(data.messages);
+      }
+      if (callRes.ok) {
+        const data = await callRes.json();
+        if (data.logs) setCallLogs(data.logs);
       }
     } catch (err) { console.error('REST sync error:', err); }
   }, [serverUrl, session?.roomCode]);
@@ -54,32 +66,60 @@ export function useSocket(serverUrl, session) {
       setConnected(true);
       setIsSleeping(false);
       socket.emit('join-room', { roomCode: session.roomCode, userName: session.userName });
+      syncFromRest();
     });
 
     socket.on('disconnect', () => {
       setConnected(false);
       setOtherUser(null);
+      setPartnerPresence((prev) => prev ? { ...prev, status: 'offline', lastSeen: Date.now() } : null);
     });
 
     socket.on('reconnect', () => {
       setConnected(true);
       setIsSleeping(false);
       socket.emit('join-room', { roomCode: session.roomCode, userName: session.userName });
+      syncFromRest();
     });
 
     socket.on('join-error', (msg) => setJoinError(msg));
+    socket.on('call-error', (msg) => {
+      setCallError(msg);
+      setTimeout(() => setCallError(null), 5000);
+      cleanupCall();
+    });
 
     socket.on('room-status', ({ users }) => {
       const other = users.find((u) => u.name !== session.userName);
       setOtherUser(other ? other.name : null);
     });
 
+    socket.on('presence-update', (list) => {
+      const other = list.find((u) => u.userName !== session.userName);
+      if (other) setPartnerPresence(other);
+    });
+
     socket.on('chat-history', (history) => setMessages(history));
-    socket.on('chat-message', (msg) => setMessages((prev) => [...prev, msg]));
+    socket.on('call-logs-update', (logs) => setCallLogs(logs));
+    socket.on('chat-message', (msg) => {
+      setMessages((prev) => [...prev, msg]);
+      if (msg.from !== session.userName && document.visibilityState === 'visible') {
+        socket.emit('message-read');
+      }
+    });
+
+    socket.on('messages-status-update', ({ status }) => {
+      setMessages((prev) =>
+        prev.map((m) => (m.from === session.userName && m.status !== 'read' ? { ...m, status } : m))
+      );
+    });
+
+    socket.on('user-typing', ({ isTyping }) => setPartnerTyping(isTyping));
 
     // WebRTC
     socket.on('incoming-call', (data) => {
       setCallState('incoming');
+      setIsEmergencyCall(!!data.isEmergency);
       setIncomingOffer(data.offer);
     });
 
@@ -112,7 +152,7 @@ export function useSocket(serverUrl, session) {
       socket.disconnect();
       cleanupCall();
     };
-  }, [session, serverUrl]);
+  }, [session, serverUrl, syncFromRest]);
 
   const cleanupCall = useCallback(() => {
     pcRef.current?.close();
@@ -121,6 +161,7 @@ export function useSocket(serverUrl, session) {
     localStreamRef.current = null;
     iceCandidateQueue.current = [];
     setCallState('idle');
+    setIsEmergencyCall(false);
     setIsMuted(false);
     setIncomingOffer(null);
   }, []);
@@ -132,7 +173,6 @@ export function useSocket(serverUrl, session) {
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'hidden') {
-        // Start 15s timer to sleep if idle (not in a call)
         if (callState === 'idle') {
           sleepTimer = setTimeout(() => {
             if (socketRef.current && socketRef.current.connected) {
@@ -144,15 +184,14 @@ export function useSocket(serverUrl, session) {
         }
       } else if (document.visibilityState === 'visible') {
         if (sleepTimer) clearTimeout(sleepTimer);
-        
-        // If we were sleeping or disconnected, wake up!
         if (socketRef.current && (!socketRef.current.connected || isSleeping)) {
           console.log('☀️ App woken up. Reconnecting socket and syncing...');
           socketRef.current.connect();
           setIsSleeping(false);
-          syncMessagesFromRest();
+          syncFromRest();
         }
         markAsRead();
+        if (socketRef.current) socketRef.current.emit('message-read');
       }
     };
 
@@ -160,7 +199,7 @@ export function useSocket(serverUrl, session) {
       if (socketRef.current && !socketRef.current.connected && document.visibilityState === 'visible') {
         socketRef.current.connect();
         setIsSleeping(false);
-        syncMessagesFromRest();
+        syncFromRest();
       }
     };
 
@@ -172,7 +211,7 @@ export function useSocket(serverUrl, session) {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('online', handleOnline);
     };
-  }, [session, callState, isSleeping, syncMessagesFromRest]);
+  }, [session, callState, isSleeping, syncFromRest]);
 
   // ── Unread Message Tracking ──────────────────────────
   const markAsRead = useCallback(() => {
@@ -216,14 +255,15 @@ export function useSocket(serverUrl, session) {
     return s;
   };
 
-  const startCall = useCallback(async () => {
+  const startCall = useCallback(async (isEmergency = false) => {
     try {
       const pc = createPC();
       const stream = await getMic();
       stream.getTracks().forEach((t) => pc.addTrack(t, stream));
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
-      socketRef.current.emit('call-user', { offer });
+      setIsEmergencyCall(isEmergency);
+      socketRef.current.emit('call-user', { offer, isEmergency });
       setCallState('calling');
     } catch (e) { console.error('Call start error:', e); cleanupCall(); }
   }, [createPC, cleanupCall]);
@@ -260,17 +300,30 @@ export function useSocket(serverUrl, session) {
     if (track) { track.enabled = !track.enabled; setIsMuted(!track.enabled); }
   }, []);
 
-  const sendMessage = useCallback((text) => {
-    if (socketRef.current && text.trim()) socketRef.current.emit('chat-message', { text: text.trim() });
+  const sendMessage = useCallback((text, isEmergency = false) => {
+    if (socketRef.current && text.trim()) {
+      socketRef.current.emit('chat-message', { text: text.trim(), isEmergency });
+    }
+  }, []);
+
+  const emitTyping = useCallback((isTyping) => {
+    if (socketRef.current) {
+      socketRef.current.emit(isTyping ? 'typing-start' : 'typing-stop');
+    }
   }, []);
 
   return {
     connected,
     isSleeping,
     otherUser,
+    partnerPresence,
+    partnerTyping,
     messages,
+    callLogs,
     sendMessage,
+    emitTyping,
     callState,
+    isEmergencyCall,
     startCall,
     answerCall,
     rejectCall,
@@ -278,6 +331,7 @@ export function useSocket(serverUrl, session) {
     toggleMute,
     isMuted,
     joinError,
+    callError,
     unreadCount,
     markAsRead,
     pushPermission: permission,

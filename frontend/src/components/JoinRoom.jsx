@@ -1,125 +1,136 @@
 import { useState } from 'react';
 
 export default function JoinRoom({ serverUrl, onJoin }) {
-  const [name, setName] = useState('');
-  const [roomCode, setRoomCode] = useState('');
-  const [mode, setMode] = useState(null); // null | 'create' | 'join'
+  const [name, setName] = useState('Mom');
+  const [familyKey, setFamilyKey] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [createdCode, setCreatedCode] = useState('');
+  const [showKey, setShowKey] = useState(false);
 
-  const handleCreate = async () => {
-    if (!name.trim()) { setError('Enter your name'); return; }
+  const handleEnter = async (e) => {
+    if (e) e.preventDefault();
+    if (!name.trim()) { setError('Please select or enter your name'); return; }
+    if (!familyKey.trim()) { setError('Please enter the Family Key'); return; }
+
     setLoading(true);
     setError('');
+
     try {
-      const res = await fetch(`${serverUrl}/api/room`, { method: 'POST' });
-      if (!res.ok) throw new Error('Response not OK');
-      const data = await res.json();
-      setCreatedCode(data.code);
-      setMode('created');
-      setLoading(false);
+      const res = await fetch(`${serverUrl}/api/verify-key`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userName: name.trim(), familyKey: familyKey.trim() }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (res.status === 429) {
+        setError('Too many incorrect attempts. Please try again later.');
+        setLoading(false);
+        return;
+      }
+
+      if (!res.ok || !data.success) {
+        setError(data.error || 'Invalid Family Key. Please try again.');
+        setLoading(false);
+        return;
+      }
+
+      onJoin({ roomCode: data.roomCode || 'FAMILY', userName: name.trim() });
     } catch (err) {
-      setError(`Could not reach server at: ${serverUrl || 'relative path'}`);
-      setMode(null);
+      setError(`Could not connect to server at: ${serverUrl || 'localhost'}`);
       setLoading(false);
     }
-  };
-
-  const handleJoin = async () => {
-    if (!name.trim()) { setError('Enter your name'); return; }
-    if (!roomCode.trim()) { setError('Enter the room code'); return; }
-    setLoading(true);
-    setError('');
-    try {
-      const res = await fetch(`${serverUrl}/api/room/${roomCode.toUpperCase()}`);
-      if (!res.ok) { setError('Room not found'); setLoading(false); return; }
-      const data = await res.json();
-      if (data.full) { setError('Room is full'); setLoading(false); return; }
-      onJoin({ roomCode: roomCode.toUpperCase(), userName: name.trim() });
-    } catch (err) {
-      setError(`Could not reach server at: ${serverUrl || 'relative path'}`);
-      setMode(null);
-      setLoading(false);
-    }
-  };
-
-  const enterCreatedRoom = () => {
-    onJoin({ roomCode: createdCode, userName: name.trim() });
   };
 
   return (
     <div className="join-screen">
-      <div className="join-container">
+      <div className="join-container" style={{ maxWidth: '380px' }}>
         <div className="join-logo">
-          <div className="logo-icon">
+          <div className="logo-icon" style={{ background: 'linear-gradient(135deg, #007aff, #5856d6)' }}>
             <svg width="40" height="40" viewBox="0 0 24 24" fill="none">
-              <path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z" fill="white"/>
             </svg>
           </div>
           <h1>Family Link</h1>
-          <p className="join-subtitle">Private voice & chat for two</p>
+          <p className="join-subtitle">Private family voice & chat</p>
         </div>
 
-        {!mode && (
-          <div className="join-form animate-in">
-            <div className="input-group">
-              <label>Your Name</label>
+        <form onSubmit={handleEnter} className="join-form animate-in">
+          <div className="input-group">
+            <label>Who are you?</label>
+            <div style={{ display: 'flex', gap: '10px', marginBottom: '8px' }}>
+              <button
+                type="button"
+                onClick={() => setName('Mom')}
+                style={{
+                  flex: 1, padding: '10px', borderRadius: '8px', border: '2px solid',
+                  borderColor: name === 'Mom' ? '#007aff' : '#e5e5ea',
+                  background: name === 'Mom' ? '#007aff15' : 'transparent',
+                  color: name === 'Mom' ? '#007aff' : 'inherit',
+                  fontWeight: 'bold', cursor: 'pointer', fontSize: '15px'
+                }}
+              >
+                👩 Mom
+              </button>
+              <button
+                type="button"
+                onClick={() => setName('Brother')}
+                style={{
+                  flex: 1, padding: '10px', borderRadius: '8px', border: '2px solid',
+                  borderColor: name === 'Brother' ? '#007aff' : '#e5e5ea',
+                  background: name === 'Brother' ? '#007aff15' : 'transparent',
+                  color: name === 'Brother' ? '#007aff' : 'inherit',
+                  fontWeight: 'bold', cursor: 'pointer', fontSize: '15px'
+                }}
+              >
+                👦 Brother
+              </button>
+            </div>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Or type name..."
+              maxLength={20}
+              style={{ fontSize: '14px', padding: '8px 12px' }}
+            />
+          </div>
+
+          <div className="input-group">
+            <label>Family Key</label>
+            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
               <input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Enter your name"
-                maxLength={20}
+                type={showKey ? 'text' : 'password'}
+                value={familyKey}
+                onChange={(e) => setFamilyKey(e.target.value)}
+                placeholder="Enter shared Family Key"
                 autoComplete="off"
+                style={{ width: '100%', paddingRight: '40px', fontSize: '16px', letterSpacing: showKey ? 'normal' : '2px' }}
               />
-            </div>
-            <div className="join-buttons">
-              <button className="btn-primary" onClick={() => { if(!name.trim()){setError('Enter your name');return;} setError(''); handleCreate(); }} disabled={loading}>
-                Create Room
+              <button
+                type="button"
+                onClick={() => setShowKey(!showKey)}
+                style={{
+                  position: 'absolute', right: '10px', background: 'none', border: 'none',
+                  cursor: 'pointer', color: '#8e8e93', fontSize: '16px', padding: '4px'
+                }}
+                title={showKey ? 'Hide key' : 'Show key'}
+              >
+                {showKey ? '👁️' : '🔒'}
               </button>
-              <button className="btn-secondary" onClick={() => { if(!name.trim()){setError('Enter your name');return;} setError(''); setMode('join'); }}>
-                Join Room
-              </button>
             </div>
+            <p className="code-hint" style={{ marginTop: '6px', fontSize: '12px' }}>
+              Only family members with the key can enter.
+            </p>
           </div>
-        )}
 
-        {mode === 'join' && (
-          <div className="join-form animate-in">
-            <div className="input-group">
-              <label>Room Code</label>
-              <input
-                type="text"
-                value={roomCode}
-                onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
-                placeholder="e.g. A3F1B2"
-                maxLength={6}
-                autoComplete="off"
-                style={{ letterSpacing: '4px', textAlign: 'center', fontWeight: 600 }}
-              />
-            </div>
-            <div className="join-buttons">
-              <button className="btn-primary" onClick={handleJoin} disabled={loading}>
-                {loading ? 'Joining…' : 'Join'}
-              </button>
-              <button className="btn-ghost" onClick={() => { setMode(null); setError(''); }}>Back</button>
-            </div>
-          </div>
-        )}
+          <button type="submit" className="btn-primary" disabled={loading} style={{ marginTop: '10px', padding: '14px' }}>
+            {loading ? 'Verifying…' : 'Enter Keryx'}
+          </button>
+        </form>
 
-        {mode === 'created' && (
-          <div className="join-form animate-in">
-            <div className="code-display">
-              <label>Share this code</label>
-              <div className="code-value">{createdCode}</div>
-              <p className="code-hint">Send this to the person you want to chat with</p>
-            </div>
-            <button className="btn-primary" onClick={enterCreatedRoom}>Enter Room</button>
-          </div>
-        )}
-
-        {error && <div className="join-error animate-in">{error}</div>}
+        {error && <div className="join-error animate-in" style={{ marginTop: '16px' }}>{error}</div>}
       </div>
     </div>
   );

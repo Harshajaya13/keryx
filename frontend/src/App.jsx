@@ -40,6 +40,10 @@ export default function App() {
     unreadCount,
     markAsRead,
     pushPermission,
+    fcmToken,
+    pushLoading,
+    pushError,
+    isMockToken,
     requestPushPermission,
   } = useSocket(SERVER_URL, session);
 

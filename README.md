@@ -29,7 +29,16 @@ The idea was simple:
 
 If both devices already have internet access, why not create a tiny communication bridge dedicated to just these two people?
 
-Rather than keeping a permanent connection alive, Keryx sleeps most of the time, consuming almost no battery or RAM.
+Rather than keeping a permanent connection alive 24/7, Keryx sleeps when the browser sleeps, consuming almost no battery or RAM.
+
+### The Sleep Philosophy
+* **Open Chrome → Connected**
+* **Switch Tabs → Still Connected**
+* **Close Chrome → Sleep**
+* **Push Notification → Wake**
+* **Reconnect Automatically**
+
+**Keryx sleeps when the browser sleeps, not when the user simply looks somewhere else.**
 
 When communication is needed:
 

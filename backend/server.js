@@ -291,19 +291,21 @@ io.on('connection', (socket) => {
       sendAdminNotification(`🚨 Emergency message sent by ${socket.userName} on Keryx!`);
     }
 
-    const partnerToken = db.getFcmTokenForUser(getOtherUserName(socket));
-    if (partnerToken) {
-      sendPushNotification(partnerToken, {
-        title: msg.isEmergency ? `🚨 EMERGENCY from ${socket.userName}` : `Message from ${socket.userName}`,
-        body: trimmedText,
-        data: {
-          type: 'chat',
-          roomCode: socket.roomCode,
-          from: socket.userName,
-          messageId: message.id,
-          time: String(message.time),
-        },
-      });
+    if (!targetSocketId || msg.isEmergency) {
+      const partnerToken = db.getFcmTokenForUser(getOtherUserName(socket));
+      if (partnerToken) {
+        sendPushNotification(partnerToken, {
+          title: msg.isEmergency ? `🚨 EMERGENCY from ${socket.userName}` : `Message from ${socket.userName}`,
+          body: trimmedText,
+          data: {
+            type: 'chat',
+            roomCode: socket.roomCode,
+            from: socket.userName,
+            messageId: message.id,
+            time: String(message.time),
+          },
+        });
+      }
     }
   });
 

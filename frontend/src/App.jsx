@@ -4,6 +4,7 @@ import JoinRoom from './components/JoinRoom';
 import Chat from './components/Chat';
 import CallScreen from './components/CallScreen';
 import CallHistory from './components/CallHistory';
+import KeryxLoader from './components/KeryxLoader';
 
 const getSanitizedServerUrl = () => {
   const url = import.meta.env.VITE_SERVER_URL || (import.meta.env.DEV ? 'http://localhost:3001' : '');
@@ -15,6 +16,7 @@ export default function App() {
   const [session, setSession] = useState(null); // { token, userName }
   const [showHistory, setShowHistory] = useState(false);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [initialLoadDone, setInitialLoadDone] = useState(false);
 
   const {
     connected,
@@ -60,10 +62,17 @@ export default function App() {
 
   useEffect(() => {
     const saved = localStorage.getItem('fl_session_v3');
-    if (saved) {
-      try { setSession(JSON.parse(saved)); } catch {}
+    if (saved && !session) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed?.token && parsed?.userName) {
+          setSession(parsed);
+        }
+      } catch (e) {
+        localStorage.removeItem('fl_session_v3');
+      }
     }
-  }, []);
+  }, [session]);
 
   useEffect(() => {
     if (session) localStorage.setItem('fl_session_v3', JSON.stringify(session));
@@ -72,11 +81,22 @@ export default function App() {
   const handleLeave = () => {
     localStorage.removeItem('fl_session_v3');
     setSession(null);
+    setInitialLoadDone(false);
     window.location.reload();
   };
 
   if (!session) {
     return <JoinRoom serverUrl={SERVER_URL} onJoin={setSession} />;
+  }
+
+  if (!initialLoadDone) {
+    return (
+      <KeryxLoader
+        userName={session.userName}
+        connected={connected}
+        onFinish={() => setInitialLoadDone(true)}
+      />
+    );
   }
 
   const getStatusText = () => {

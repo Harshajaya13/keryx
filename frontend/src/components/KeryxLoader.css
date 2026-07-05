@@ -1,0 +1,307 @@
+/* ── Keryx Messenger Loading Experience ──────────────────────────────────── */
+
+.keryx-loader-container {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(145deg, #121318 0%, #1a1d28 50%, #232536 100%);
+  color: #ffffff;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  overflow: hidden;
+  transition: opacity 0.45s cubic-bezier(0.4, 0, 0.2, 1), transform 0.45s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.keryx-loader-container.fade-out {
+  opacity: 0;
+  transform: scale(1.02);
+  pointer-events: none;
+}
+
+/* ── Soft Warm Morning Sky Glow ───────────────────────────────────────────── */
+.morning-glow {
+  position: absolute;
+  top: 15%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 320px;
+  height: 320px;
+  background: radial-gradient(circle, rgba(255, 179, 71, 0.15) 0%, rgba(255, 140, 0, 0.05) 50%, transparent 70%);
+  border-radius: 50%;
+  pointer-events: none;
+  filter: blur(20px);
+  animation: pulseGlow 6s ease-in-out infinite;
+}
+
+@keyframes pulseGlow {
+  0%, 100% { opacity: 0.6; transform: translateX(-50%) scale(0.95); }
+  50% { opacity: 1; transform: translateX(-50%) scale(1.05); }
+}
+
+/* ── Floating Background Clouds ──────────────────────────────────────────── */
+.cloud-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.cloud {
+  position: absolute;
+  fill: rgba(255, 255, 255, 0.08);
+  filter: blur(1px);
+}
+
+.cloud-1 {
+  top: 25%;
+  left: -150px;
+  width: 140px;
+  animation: cloudDrift 22s linear infinite;
+}
+
+.cloud-2 {
+  top: 45%;
+  left: -200px;
+  width: 180px;
+  animation: cloudDrift 30s linear infinite;
+  animation-delay: -10s;
+}
+
+.cloud-3 {
+  top: 20%;
+  left: -120px;
+  width: 100px;
+  animation: cloudDrift 26s linear infinite;
+  animation-delay: -18s;
+}
+
+@keyframes cloudDrift {
+  0% { transform: translateX(-10vw); }
+  100% { transform: translateX(110vw); }
+}
+
+/* ── Story Illustration Stage ────────────────────────────────────────────── */
+.illustration-stage {
+  position: relative;
+  width: 340px;
+  height: 200px;
+  margin-bottom: 32px;
+  display: flex;
+  align-items: center;
+}
+
+/* ── The Nest & Tree Branch ─────────────────────────────────────────────── */
+.nest-container {
+  position: absolute;
+  right: 20px;
+  bottom: 30px;
+  width: 110px;
+  height: 90px;
+  z-index: 2;
+}
+
+.branch-svg {
+  position: absolute;
+  right: -30px;
+  bottom: 0px;
+  width: 150px;
+  height: 70px;
+  z-index: 1;
+}
+
+.chick-svg {
+  position: absolute;
+  right: 42px;
+  bottom: 38px;
+  width: 44px;
+  height: 44px;
+  z-index: 2;
+  transform-origin: bottom center;
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.chick-svg.waiting {
+  animation: chickBounce 3s ease-in-out infinite;
+}
+
+.chick-svg.happy {
+  animation: chickJoy 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) infinite alternate;
+}
+
+@keyframes chickBounce {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-3px) scale(1.02, 0.98); }
+}
+
+@keyframes chickJoy {
+  0% { transform: translateY(0) scale(1, 1); }
+  100% { transform: translateY(-8px) scale(1.08, 0.94); }
+}
+
+/* ── Flying Messenger Bird ──────────────────────────────────────────────── */
+.bird-container {
+  position: absolute;
+  left: 20px;
+  bottom: 60px;
+  width: 64px;
+  height: 52px;
+  z-index: 3;
+  transition: left 0.8s cubic-bezier(0.25, 1, 0.5, 1), bottom 0.8s cubic-bezier(0.25, 1, 0.5, 1), transform 0.8s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+.bird-container.flying {
+  left: 42%;
+  bottom: 75px;
+  animation: birdHover 2.4s ease-in-out infinite alternate;
+}
+
+.bird-container.landing {
+  left: calc(100% - 130px);
+  bottom: 55px;
+  transform: scale(0.95);
+}
+
+@keyframes birdHover {
+  0% { transform: translateY(-6px) rotate(-3deg); }
+  100% { transform: translateY(6px) rotate(2deg); }
+}
+
+.bird-wing-left,
+.bird-wing-right {
+  transform-origin: 50% 50%;
+}
+
+.bird-container.flying .bird-wing-left {
+  animation: wingFlapLeft 0.6s ease-in-out infinite alternate;
+}
+
+.bird-container.flying .bird-wing-right {
+  animation: wingFlapRight 0.6s ease-in-out infinite alternate;
+}
+
+@keyframes wingFlapLeft {
+  0% { transform: rotate(0deg) translateY(0); }
+  100% { transform: rotate(-35deg) translateY(-4px); }
+}
+
+@keyframes wingFlapRight {
+  0% { transform: rotate(0deg) translateY(0); }
+  100% { transform: rotate(35deg) translateY(-4px); }
+}
+
+/* ── Joyful Hearts & Notes when Landed ──────────────────────────────────── */
+.reaction-particles {
+  position: absolute;
+  right: 35px;
+  bottom: 75px;
+  pointer-events: none;
+  z-index: 4;
+}
+
+.particle {
+  position: absolute;
+  opacity: 0;
+  font-size: 16px;
+  animation: floatUpParticle 1.4s ease-out infinite;
+}
+
+.particle-1 { left: 0px; animation-delay: 0s; }
+.particle-2 { left: 25px; animation-delay: 0.4s; font-size: 14px; }
+.particle-3 { left: -15px; animation-delay: 0.8s; font-size: 18px; }
+
+@keyframes floatUpParticle {
+  0% { opacity: 0; transform: translateY(0) scale(0.5); }
+  30% { opacity: 1; transform: translateY(-15px) scale(1.1); }
+  80% { opacity: 0.8; transform: translateY(-35px) scale(0.9); }
+  100% { opacity: 0; transform: translateY(-45px) scale(0.6); }
+}
+
+/* ── Story Text & Status Display ────────────────────────────────────────── */
+.loader-content {
+  text-align: center;
+  z-index: 5;
+  max-width: 320px;
+  padding: 0 16px;
+}
+
+.loader-title {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  margin: 0 0 8px 0;
+  background: linear-gradient(135deg, #ffffff 0%, #a0a6c0 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.loader-subtitle {
+  font-size: 14px;
+  color: #8e94ab;
+  margin: 0 0 20px 0;
+  line-height: 1.5;
+  min-height: 42px;
+  transition: opacity 0.3s ease;
+}
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+  transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.status-badge.connecting {
+  background: rgba(255, 149, 0, 0.15);
+  color: #ffaa33;
+  border: 1px solid rgba(255, 149, 0, 0.3);
+}
+
+.status-badge.connected {
+  background: rgba(52, 199, 89, 0.2);
+  color: #34c759;
+  border: 1px solid rgba(52, 199, 89, 0.4);
+  transform: scale(1.05);
+}
+
+.pulse-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.status-badge.connecting .pulse-dot {
+  animation: badgePulse 1.2s infinite ease-in-out;
+}
+
+@keyframes badgePulse {
+  0%, 100% { opacity: 0.3; transform: scale(0.8); }
+  50% { opacity: 1; transform: scale(1.2); }
+}
+
+/* ── Accessibility: Reduced Motion ──────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .cloud,
+  .morning-glow,
+  .chick-svg.waiting,
+  .bird-container.flying,
+  .bird-container.flying .bird-wing-left,
+  .bird-container.flying .bird-wing-right,
+  .particle {
+    animation: none !important;
+  }
+  
+  .bird-container {
+    transition: left 0.3s linear, bottom 0.3s linear;
+  }
+}

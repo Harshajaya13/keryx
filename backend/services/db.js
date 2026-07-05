@@ -77,7 +77,9 @@ function initTables() {
       status TEXT,
       is_emergency INTEGER DEFAULT 0
     );
+  `);
 
+  runSql(`
     CREATE TABLE IF NOT EXISTS call_logs (
       id TEXT PRIMARY KEY,
       room_code TEXT,
@@ -87,14 +89,18 @@ function initTables() {
       duration INTEGER,
       time INTEGER
     );
+  `);
 
+  runSql(`
     CREATE TABLE IF NOT EXISTS user_presence (
       user_name TEXT PRIMARY KEY,
       status TEXT,
       last_seen INTEGER,
       fcm_token TEXT
     );
+  `);
 
+  runSql(`
     CREATE TABLE IF NOT EXISTS failed_logins (
       ip TEXT,
       time INTEGER

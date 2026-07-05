@@ -9,7 +9,7 @@ export default function JoinRoom({ serverUrl, onJoin }) {
 
   const handleEnter = async (e) => {
     if (e) e.preventDefault();
-    if (!name.trim()) { setError('Please select or enter your name'); return; }
+    if (!name) { setError('Please select who you are (Mom or Brother)'); return; }
     if (!familyKey.trim()) { setError('Please enter the Family Key'); return; }
 
     setLoading(true);
@@ -19,7 +19,7 @@ export default function JoinRoom({ serverUrl, onJoin }) {
       const res = await fetch(`${serverUrl}/api/verify-key`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userName: name.trim(), familyKey: familyKey.trim() }),
+        body: JSON.stringify({ userName: name, familyKey: familyKey.trim() }),
       });
 
       const data = await res.json().catch(() => ({}));
@@ -36,7 +36,8 @@ export default function JoinRoom({ serverUrl, onJoin }) {
         return;
       }
 
-      onJoin({ roomCode: data.roomCode || 'FAMILY', userName: name.trim() });
+      // Store signed 30-day session token
+      onJoin({ token: data.token, userName: name });
     } catch (err) {
       setError(`Could not connect to server at: ${serverUrl || 'localhost'}`);
       setLoading(false);
@@ -59,45 +60,41 @@ export default function JoinRoom({ serverUrl, onJoin }) {
         <form onSubmit={handleEnter} className="join-form animate-in">
           <div className="input-group">
             <label>Who are you?</label>
-            <div style={{ display: 'flex', gap: '10px', marginBottom: '8px' }}>
+            <div style={{ display: 'flex', gap: '12px', marginTop: '6px' }}>
               <button
                 type="button"
                 onClick={() => setName('Mom')}
                 style={{
-                  flex: 1, padding: '10px', borderRadius: '8px', border: '2px solid',
-                  borderColor: name === 'Mom' ? '#007aff' : '#e5e5ea',
-                  background: name === 'Mom' ? '#007aff15' : 'transparent',
-                  color: name === 'Mom' ? '#007aff' : 'inherit',
-                  fontWeight: 'bold', cursor: 'pointer', fontSize: '15px'
+                  flex: 1, padding: '14px 10px', borderRadius: '12px', border: '2px solid',
+                  borderColor: name === 'Mom' ? '#007aff' : '#3a3a3c',
+                  background: name === 'Mom' ? '#007aff20' : '#2c2c2e',
+                  color: name === 'Mom' ? '#fff' : '#8e8e93',
+                  fontWeight: 'bold', cursor: 'pointer', fontSize: '16px',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                  transition: 'all 0.2s ease'
                 }}
               >
-                👩 Mom
+                <span>👩</span> Mom {name === 'Mom' && '🟢'}
               </button>
               <button
                 type="button"
                 onClick={() => setName('Brother')}
                 style={{
-                  flex: 1, padding: '10px', borderRadius: '8px', border: '2px solid',
-                  borderColor: name === 'Brother' ? '#007aff' : '#e5e5ea',
-                  background: name === 'Brother' ? '#007aff15' : 'transparent',
-                  color: name === 'Brother' ? '#007aff' : 'inherit',
-                  fontWeight: 'bold', cursor: 'pointer', fontSize: '15px'
+                  flex: 1, padding: '14px 10px', borderRadius: '12px', border: '2px solid',
+                  borderColor: name === 'Brother' ? '#007aff' : '#3a3a3c',
+                  background: name === 'Brother' ? '#007aff20' : '#2c2c2e',
+                  color: name === 'Brother' ? '#fff' : '#8e8e93',
+                  fontWeight: 'bold', cursor: 'pointer', fontSize: '16px',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                  transition: 'all 0.2s ease'
                 }}
               >
-                👦 Brother
+                <span>👦</span> Brother {name === 'Brother' && '🟢'}
               </button>
             </div>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Or type name..."
-              maxLength={20}
-              style={{ fontSize: '14px', padding: '8px 12px' }}
-            />
           </div>
 
-          <div className="input-group">
+          <div className="input-group" style={{ marginTop: '16px' }}>
             <label>Family Key</label>
             <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
               <input
@@ -125,7 +122,7 @@ export default function JoinRoom({ serverUrl, onJoin }) {
             </p>
           </div>
 
-          <button type="submit" className="btn-primary" disabled={loading} style={{ marginTop: '10px', padding: '14px' }}>
+          <button type="submit" className="btn-primary" disabled={loading} style={{ marginTop: '16px', padding: '14px', fontSize: '16px', fontWeight: 'bold' }}>
             {loading ? 'Verifying…' : 'Enter Keryx'}
           </button>
         </form>

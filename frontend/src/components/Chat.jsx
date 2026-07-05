@@ -36,12 +36,23 @@ export default function Chat({ messages, userName, onSend, connected, partnerTyp
 
   const formatTime = (ts) => {
     const d = new Date(ts);
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
+
+  const getDateLabel = (ts) => {
+    const d = new Date(ts);
     const today = new Date();
-    const isToday = d.toDateString() === today.toDateString();
-    if (isToday) {
-      return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const yesterday = new Date();
+    yesterday.setDate(today.getDate() - 1);
+
+    if (d.toDateString() === today.toDateString()) return 'Today';
+    if (d.toDateString() === yesterday.toDateString()) return 'Yesterday';
+
+    const diffDays = Math.floor((today - d) / (1000 * 60 * 60 * 24));
+    if (diffDays < 7 && diffDays > 0) {
+      return d.toLocaleDateString([], { weekday: 'long' });
     }
-    return d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return 'Older messages (' + d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ')';
   };
 
   const getStatusIcon = (status) => {
@@ -53,7 +64,7 @@ export default function Chat({ messages, userName, onSend, connected, partnerTyp
   // Group consecutive messages by same sender
   const grouped = messages.reduce((acc, msg, i) => {
     const prev = messages[i - 1];
-    const isNewGroup = !prev || prev.from !== msg.from || msg.time - prev.time > 60000 || msg.from === 'system' || prev?.from === 'system';
+    const isNewGroup = !prev || prev.from !== msg.from || msg.time - prev.time > 60000 || msg.from === 'system' || prev?.from === 'system' || getDateLabel(msg.time) !== getDateLabel(prev?.time || 0);
     if (isNewGroup) acc.push([msg]);
     else acc[acc.length - 1].push(msg);
     return acc;
@@ -70,48 +81,67 @@ export default function Chat({ messages, userName, onSend, connected, partnerTyp
           </div>
         )}
         {grouped.map((group, gi) => {
-          const isSystem = group[0].from === 'system';
-          if (isSystem) {
-            return (
-              <div key={gi} style={{ display: 'flex', justifyContent: 'center', margin: '12px 0' }}>
-                {group.map((msg, mi) => (
-                  <div key={msg.id || mi} style={{
-                    background: msg.isEmergency ? '#ff3b3030' : '#2c2c2e',
-                    border: msg.isEmergency ? '1px solid #ff3b30' : 'none',
-                    color: msg.isEmergency ? '#ff3b30' : '#8e8e93',
-                    padding: '6px 14px', borderRadius: '16px', fontSize: '13px', fontWeight: 'bold',
-                    display: 'flex', alignItems: 'center', gap: '6px'
-                  }}>
-                    <span>{msg.text}</span>
-                    <span style={{ fontSize: '11px', opacity: 0.8 }}>({formatTime(msg.time)})</span>
-                  </div>
-                ))}
-              </div>
-            );
-          }
+          const currentDateLabel = getDateLabel(group[0].time);
+          const prevDateLabel = gi > 0 ? getDateLabel(grouped[gi - 1][0].time) : null;
+          const showDateSeparator = currentDateLabel !== prevDateLabel;
 
-          const isMe = group[0].from === userName;
+          const isSystem = group[0].from === 'system';
+
           return (
-            <div key={gi} className={`msg-group ${isMe ? 'me' : 'other'}`}>
-              {!isMe && <span className="sender-name">{group[0].from}</span>}
-              {group.map((msg, mi) => (
-                <div key={msg.id || mi} className="msg-row">
-                  <div className={`msg-bubble ${isMe ? 'bubble-me' : 'bubble-other'} ${mi === group.length - 1 ? 'bubble-tail' : ''}`}
-                    style={msg.isEmergency ? {
-                      background: isMe ? '#ff3b30' : '#ff3b3020',
-                      border: '1px solid #ff3b30',
-                      color: isMe ? 'white' : '#ff3b30'
-                    } : {}}
-                  >
-                    {msg.isEmergency && <div style={{ fontSize: '11px', fontWeight: 'bold', marginBottom: '2px', textTransform: 'uppercase' }}>🚨 Emergency Alert</div>}
-                    <span className="msg-text">{msg.text}</span>
-                    <span className="msg-time">
-                      {formatTime(msg.time)}
-                      {isMe && getStatusIcon(msg.status)}
-                    </span>
-                  </div>
+            <div key={gi}>
+              {showDateSeparator && (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '20px 0 12px 0' }}>
+                  <span style={{
+                    background: '#2c2c2e', color: '#8e8e93', fontSize: '11px', fontWeight: 'bold',
+                    padding: '4px 14px', borderRadius: '12px', textTransform: 'uppercase', letterSpacing: '0.5px',
+                    boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                  }}>
+                    {currentDateLabel}
+                  </span>
                 </div>
-              ))}
+              )}
+
+              {isSystem ? (
+                <div style={{ display: 'flex', justifyContent: 'center', margin: '12px 0' }}>
+                  {group.map((msg, mi) => (
+                    <div key={msg.id || mi} style={{
+                      background: msg.isEmergency ? '#ff3b3030' : '#2c2c2e',
+                      border: msg.isEmergency ? '1px solid #ff3b30' : 'none',
+                      color: msg.isEmergency ? '#ff3b30' : '#8e8e93',
+                      padding: '6px 14px', borderRadius: '16px', fontSize: '13px', fontWeight: 'bold',
+                      display: 'flex', alignItems: 'center', gap: '6px'
+                    }}>
+                      <span>{msg.text}</span>
+                      <span style={{ fontSize: '11px', opacity: 0.8 }}>({formatTime(msg.time)})</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className={`msg-group ${group[0].from === userName ? 'me' : 'other'}`}>
+                  {group[0].from !== userName && <span className="sender-name">{group[0].from}</span>}
+                  {group.map((msg, mi) => {
+                    const isMe = msg.from === userName;
+                    return (
+                      <div key={msg.id || mi} className="msg-row">
+                        <div className={`msg-bubble ${isMe ? 'bubble-me' : 'bubble-other'} ${mi === group.length - 1 ? 'bubble-tail' : ''}`}
+                          style={msg.isEmergency ? {
+                            background: isMe ? '#ff3b30' : '#ff3b3020',
+                            border: '1px solid #ff3b30',
+                            color: isMe ? 'white' : '#ff3b30'
+                          } : {}}
+                        >
+                          {msg.isEmergency && <div style={{ fontSize: '11px', fontWeight: 'bold', marginBottom: '2px', textTransform: 'uppercase' }}>🚨 Emergency Alert</div>}
+                          <span className="msg-text">{msg.text}</span>
+                          <span className="msg-time">
+                            {formatTime(msg.time)}
+                            {isMe && getStatusIcon(msg.status)}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           );
         })}

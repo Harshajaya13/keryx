@@ -8,9 +8,44 @@ const bcrypt = require('bcryptjs');
 const { sendPushNotification } = require('./services/fcm');
 const db = require('./services/db');
 
+// ── Strict Family Key Requirement (Phase 3 Requirement 2) ──
+if (!process.env.FAMILY_KEY_HASH) {
+  console.error('❌ FATAL ERROR: FAMILY_KEY_HASH environment variable must be configured.');
+  console.error('❌ Never silently use a default key in production or development. Refusing to start.');
+  process.exit(1);
+}
+const getFamilyKeyHash = () => process.env.FAMILY_KEY_HASH;
+
+// ── Secure Signed Session Tokens (30 Days) ─────────────
+const SESSION_SECRET = process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex');
+const SESSION_DURATION_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+
+function generateSessionToken(userName) {
+  const expires = Date.now() + SESSION_DURATION_MS;
+  const payload = `${userName}:${expires}`;
+  const hmac = crypto.createHmac('sha256', SESSION_SECRET).update(payload).digest('hex');
+  return Buffer.from(`${payload}:${hmac}`).toString('base64');
+}
+
+function verifySessionToken(tokenStr) {
+  try {
+    if (!tokenStr) return null;
+    const decoded = Buffer.from(tokenStr, 'base64').toString('utf8');
+    const parts = decoded.split(':');
+    if (parts.length !== 3) return null;
+    const [userName, expiresStr, hmac] = parts;
+    if (Number(expiresStr) < Date.now()) return null; // Token expired
+    const payload = `${userName}:${expiresStr}`;
+    const expectedHmac = crypto.createHmac('sha256', SESSION_SECRET).update(payload).digest('hex');
+    if (hmac === expectedHmac) return userName;
+  } catch (e) {
+    return null;
+  }
+  return null;
+}
+
 const app = express();
 const server = http.createServer(app);
-
 const PORT = process.env.PORT || 3001;
 
 const getSanitizedFrontendUrl = () => {
@@ -27,22 +62,8 @@ app.use(express.json());
 
 // Health check endpoint
 app.get('/', (req, res) => {
-  res.send('Family Link API is running');
+  res.send('Family Link API is running (Protected by Phase 3 Security)');
 });
-
-const io = new Server(server, {
-  cors: {
-    origin: [FRONTEND_URL, 'http://localhost:5173'],
-    methods: ['GET', 'POST'],
-  },
-  pingTimeout: 60000,
-  pingInterval: 25000,
-});
-
-// ── Family Key Hash Configuration ──────────────────────
-// Default fallback hash is for 'ramatulasi'
-const DEFAULT_FAMILY_KEY_HASH = bcrypt.hashSync('ramatulasi', 10);
-const getFamilyKeyHash = () => process.env.FAMILY_KEY_HASH || DEFAULT_FAMILY_KEY_HASH;
 
 // ── Admin Notification Helper ──────────────────────────
 function sendAdminNotification(messageText) {
@@ -68,10 +89,14 @@ function sendAdminNotification(messageText) {
 
 // ── REST Endpoints ─────────────────────────────────────
 
-// Family Key Verification
+// Family Key Verification -> issues 30-day session token
 app.post('/api/verify-key', async (req, res) => {
   const { familyKey, userName } = req.body;
   const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown';
+
+  if (!userName || !['Mom', 'Brother'].includes(userName)) {
+    return res.status(400).json({ error: 'Please select a valid identity (Mom or Brother)' });
+  }
 
   // Check rate limit (max 5 failed attempts per hour per IP)
   const failCount = db.getFailedLoginsCount(ip, 3600000);
@@ -92,49 +117,72 @@ app.post('/api/verify-key', async (req, res) => {
     });
   }
 
-  res.json({ success: true, roomCode: 'FAMILY' });
+  // Generate 30-day signed session token
+  const token = generateSessionToken(userName);
+  res.json({ success: true, token, userName });
 });
 
-// Get room messages from SQLite
-app.get('/api/room/:code/messages', (req, res) => {
-  const code = req.params.code.toUpperCase();
-  const messages = db.getMessages(code, 500);
+// Protected API Middleware
+function requireAuth(req, res, next) {
+  const token = req.headers.authorization || req.query.token;
+  const userName = verifySessionToken(token);
+  if (!userName) {
+    return res.status(401).json({ error: 'Unauthorized or session expired. Please log in again.' });
+  }
+  req.userName = userName;
+  next();
+}
+
+// Get messages (Protected, no room code required by client)
+app.get('/api/messages', requireAuth, (req, res) => {
+  const messages = db.getMessages('FAMILY', 500);
   res.json({ messages });
 });
 
-// Get room call logs from SQLite
-app.get('/api/room/:code/calls', (req, res) => {
-  const code = req.params.code.toUpperCase();
-  const logs = db.getCallLogs(code, 100);
+// Get call logs (Protected, no room code required by client)
+app.get('/api/calls', requireAuth, (req, res) => {
+  const logs = db.getCallLogs('FAMILY', 100);
   res.json({ logs });
 });
 
-// Check room status
-const rooms = {};
-app.get('/api/room/:code', (req, res) => {
-  const code = req.params.code.toUpperCase();
-  const room = rooms[code];
+// Check status (Protected)
+const rooms = { FAMILY: { users: {}, fcmTokens: {} } };
+app.get('/api/status', requireAuth, (req, res) => {
+  const room = rooms['FAMILY'];
   const userCount = room ? Object.keys(room.users).length : 0;
-  res.json({ exists: true, full: userCount >= 2, userCount });
+  res.json({ exists: true, full: userCount >= 2, userCount, userName: req.userName });
 });
 
 // ── Socket.IO ────────────────────────────────────────
+const io = new Server(server, {
+  cors: {
+    origin: [FRONTEND_URL, 'http://localhost:5173'],
+    methods: ['GET', 'POST'],
+  },
+  pingTimeout: 60000,
+  pingInterval: 25000,
+});
+
 io.on('connection', (socket) => {
   console.log('Connected:', socket.id);
-  socket.callAttempts = []; // for rate limiting
+  socket.callAttempts = [];
 
-  socket.on('join-room', ({ roomCode, userName }) => {
-    const code = (roomCode || 'FAMILY').toUpperCase();
-    if (!rooms[code]) {
-      rooms[code] = { users: {}, fcmTokens: {} };
+  socket.on('join-room', ({ token }) => {
+    // Validate signed session token
+    const userName = verifySessionToken(token);
+    if (!userName) {
+      socket.emit('join-error', 'Session expired or invalid. Please re-enter Family Key.');
+      return;
     }
+
+    const code = 'FAMILY'; // Single private family room internally
     const room = rooms[code];
 
-    // Check if name taken
+    // Check if name taken by another socket
     const nameTaken = Object.entries(room.users).some(([sid, name]) => name === userName && sid !== socket.id);
     if (nameTaken) {
-      socket.emit('join-error', 'That name is already taken in this room');
-      return;
+      // If same user reconnecting from new tab/connection, allow takeover
+      console.log(`Takeover connection for ${userName}`);
     }
 
     if (Object.keys(room.users).length >= 2 && !room.users[socket.id]) {
@@ -147,23 +195,19 @@ io.on('connection', (socket) => {
     socket.userName = userName;
     room.users[socket.id] = userName;
 
-    console.log(`${userName} joined room ${code}`);
+    console.log(`${userName} joined internal family room`);
 
-    // Mark partner's sent messages as delivered/read since user opened app
     db.updateAllMessagesStatusForUser(code, userName, 'read');
     db.updatePresence(userName, 'online', Date.now());
 
-    // Send SQLite history
     socket.emit('chat-history', db.getMessages(code, 500));
     socket.emit('call-logs-update', db.getCallLogs(code, 100));
 
-    // Broadcast status & presence
     broadcastRoomStatus(code);
     io.to(code).emit('presence-update', db.getPresence());
     socket.to(code).emit('messages-status-update', { updatedBy: userName, status: 'read' });
   });
 
-  // FCM Token Registration
   socket.on('register-fcm-token', ({ token }) => {
     if (!socket.roomCode || !socket.userName) return;
     const room = rooms[socket.roomCode];
@@ -174,7 +218,6 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Typing Indicators
   socket.on('typing-start', () => {
     if (socket.roomCode && socket.userName) {
       socket.to(socket.roomCode).emit('user-typing', { user: socket.userName, isTyping: true });
@@ -187,7 +230,6 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Chat Messages
   socket.on('chat-message', (msg) => {
     if (!socket.roomCode || !socket.userName) return;
     const room = rooms[socket.roomCode];
@@ -208,7 +250,6 @@ io.on('connection', (socket) => {
 
     db.saveMessage(message);
 
-    // Format for client
     const clientMsg = {
       id: message.id,
       from: socket.userName,
@@ -224,7 +265,6 @@ io.on('connection', (socket) => {
       sendAdminNotification(`🚨 Emergency message sent by ${socket.userName} on Keryx!`);
     }
 
-    // Push notification if partner offline/sleeping
     if (!targetSocketId) {
       const partnerToken = db.getFcmTokenForUser(getOtherUserName(socket));
       if (partnerToken) {
@@ -243,18 +283,15 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Message acknowledgments
   socket.on('message-read', () => {
     if (!socket.roomCode || !socket.userName) return;
     db.updateAllMessagesStatusForUser(socket.roomCode, socket.userName, 'read');
     socket.to(socket.roomCode).emit('messages-status-update', { updatedBy: socket.userName, status: 'read' });
   });
 
-  // ── WebRTC Signaling & Anti-Spam ────────────────────
   socket.on('call-user', (data) => {
     if (!socket.roomCode || !socket.userName) return;
 
-    // Anti-Spam: Max 5 call attempts per minute
     const now = Date.now();
     socket.callAttempts = (socket.callAttempts || []).filter(t => t > now - 60000);
     if (socket.callAttempts.length >= 5) {
@@ -276,7 +313,6 @@ io.on('connection', (socket) => {
     if (target) {
       io.to(target).emit('incoming-call', { from: socket.userName, offer: data.offer, isEmergency: data.isEmergency });
     } else {
-      // Target sleeping/offline -> send emergency incoming call push!
       const partnerToken = db.getFcmTokenForUser(getOtherUserName(socket));
       if (partnerToken) {
         console.log(`Waking partner for voice call from ${socket.userName}`);
@@ -318,10 +354,9 @@ io.on('connection', (socket) => {
       else io.to(target).emit('call-ended');
     }
 
-    // Calculate duration & log call
     if (socket.activeCallStart) {
       const duration = Math.round((Date.now() - socket.activeCallStart) / 1000);
-      const isMissed = reason === 'reject' || duration < 2; // under 2 seconds or rejected = missed
+      const isMissed = reason === 'reject' || duration < 2;
       const callType = isMissed ? (socket.activeCallType === 'emergency' ? 'missed_emergency' : 'missed') : 'outgoing';
 
       db.saveCallLog({
@@ -368,7 +403,6 @@ io.on('connection', (socket) => {
   socket.on('end-call', () => handleCallTermination('end'));
   socket.on('reject-call', () => handleCallTermination('reject'));
 
-  // ── Disconnect ──────────────────────────────────────
   socket.on('disconnect', () => {
     console.log(`${socket.userName || 'unknown'} disconnected`);
     if (socket.roomCode && rooms[socket.roomCode]) {

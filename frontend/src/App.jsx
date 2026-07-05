@@ -12,7 +12,7 @@ const getSanitizedServerUrl = () => {
 const SERVER_URL = getSanitizedServerUrl();
 
 export default function App() {
-  const [session, setSession] = useState(null); // { roomCode, userName }
+  const [session, setSession] = useState(null); // { token, userName }
   const [showHistory, setShowHistory] = useState(false);
 
   const {
@@ -42,18 +42,18 @@ export default function App() {
   } = useSocket(SERVER_URL, session);
 
   useEffect(() => {
-    const saved = localStorage.getItem('fl_session');
+    const saved = localStorage.getItem('fl_session_v3');
     if (saved) {
       try { setSession(JSON.parse(saved)); } catch {}
     }
   }, []);
 
   useEffect(() => {
-    if (session) localStorage.setItem('fl_session', JSON.stringify(session));
+    if (session) localStorage.setItem('fl_session_v3', JSON.stringify(session));
   }, [session]);
 
   const handleLeave = () => {
-    localStorage.removeItem('fl_session');
+    localStorage.removeItem('fl_session_v3');
     setSession(null);
     window.location.reload();
   };
@@ -98,6 +98,13 @@ export default function App() {
         {callError && (
           <div style={{ background: '#ff3b30', color: 'white', padding: '8px 12px', fontSize: '13px', fontWeight: 'bold', textAlign: 'center', animation: 'fadeIn 0.2s' }}>
             ⚠️ {callError}
+          </div>
+        )}
+
+        {joinError && (
+          <div style={{ background: '#ff3b30', color: 'white', padding: '8px 12px', fontSize: '13px', fontWeight: 'bold', textAlign: 'center', animation: 'fadeIn 0.2s', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span>⚠️ {joinError}</span>
+            <button onClick={handleLeave} style={{ background: 'white', color: '#ff3b30', border: 'none', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>Re-login</button>
           </div>
         )}
 
@@ -146,7 +153,7 @@ export default function App() {
         </div>
 
         <div className="room-badge" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span>Key Lock: <span className="room-code">Active 🔒</span></span>
+          <span>Security: <span className="room-code" style={{ color: '#34c759' }}>Protected 🔒 (30d Token)</span></span>
           <button
             onClick={() => setShowHistory(!showHistory)}
             style={{

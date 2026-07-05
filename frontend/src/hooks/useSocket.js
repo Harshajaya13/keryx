@@ -33,11 +33,12 @@ export function useSocket(serverUrl, session) {
   const { permission, requestPermissionAndRegister } = usePushNotifications(socketRef.current, session);
 
   const syncFromRest = useCallback(async () => {
-    if (!session?.roomCode) return;
+    if (!session?.token) return;
     try {
+      const headers = { 'Authorization': session.token };
       const [msgRes, callRes] = await Promise.all([
-        fetch(`${serverUrl}/api/room/${session.roomCode}/messages`),
-        fetch(`${serverUrl}/api/room/${session.roomCode}/calls`),
+        fetch(`${serverUrl}/api/messages`, { headers }),
+        fetch(`${serverUrl}/api/calls`, { headers }),
       ]);
       if (msgRes.ok) {
         const data = await msgRes.json();
@@ -48,11 +49,11 @@ export function useSocket(serverUrl, session) {
         if (data.logs) setCallLogs(data.logs);
       }
     } catch (err) { console.error('REST sync error:', err); }
-  }, [serverUrl, session?.roomCode]);
+  }, [serverUrl, session?.token]);
 
   // ── Socket connection ──────────────────────────────
   useEffect(() => {
-    if (!session) return;
+    if (!session?.token) return;
 
     const socket = io(serverUrl, {
       reconnection: true,
@@ -65,7 +66,7 @@ export function useSocket(serverUrl, session) {
     socket.on('connect', () => {
       setConnected(true);
       setIsSleeping(false);
-      socket.emit('join-room', { roomCode: session.roomCode, userName: session.userName });
+      socket.emit('join-room', { token: session.token });
       syncFromRest();
     });
 
@@ -78,7 +79,7 @@ export function useSocket(serverUrl, session) {
     socket.on('reconnect', () => {
       setConnected(true);
       setIsSleeping(false);
-      socket.emit('join-room', { roomCode: session.roomCode, userName: session.userName });
+      socket.emit('join-room', { token: session.token });
       syncFromRest();
     });
 
@@ -168,7 +169,7 @@ export function useSocket(serverUrl, session) {
 
   // ── Idle Sleep & Reconnect Logic ─────────────────────
   useEffect(() => {
-    if (!session) return;
+    if (!session?.token) return;
     let sleepTimer = null;
 
     const handleVisibilityChange = () => {
@@ -215,14 +216,14 @@ export function useSocket(serverUrl, session) {
 
   // ── Unread Message Tracking ──────────────────────────
   const markAsRead = useCallback(() => {
-    if (!session?.roomCode) return;
-    localStorage.setItem(`fl_last_read_${session.roomCode}`, String(Date.now()));
+    if (!session?.userName) return;
+    localStorage.setItem(`fl_last_read_FAMILY`, String(Date.now()));
     setUnreadCount(0);
-  }, [session?.roomCode]);
+  }, [session?.userName]);
 
   useEffect(() => {
-    if (!session?.roomCode || messages.length === 0) return;
-    const lastRead = Number(localStorage.getItem(`fl_last_read_${session.roomCode}`) || 0);
+    if (!session?.userName || messages.length === 0) return;
+    const lastRead = Number(localStorage.getItem(`fl_last_read_FAMILY`) || 0);
 
     if (document.visibilityState === 'visible') {
       markAsRead();
@@ -230,7 +231,7 @@ export function useSocket(serverUrl, session) {
       const unread = messages.filter((m) => m.time > lastRead && m.from !== session.userName).length;
       setUnreadCount(unread);
     }
-  }, [messages, session?.roomCode, session?.userName, markAsRead]);
+  }, [messages, session?.userName, markAsRead]);
 
   const createPC = useCallback(() => {
     const pc = new RTCPeerConnection(ICE_SERVERS);
@@ -334,7 +335,7 @@ export function useSocket(serverUrl, session) {
     callError,
     unreadCount,
     markAsRead,
-    pushPermission: permission,
-    requestPushPermission: requestPermissionAndRegister,
+    pushPermission,
+    requestPushPermission,
   };
 }

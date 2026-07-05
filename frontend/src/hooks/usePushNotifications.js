@@ -6,6 +6,9 @@ export function usePushNotifications(socket, session) {
     typeof Notification !== 'undefined' ? Notification.permission : 'default'
   );
   const [fcmToken, setFcmToken] = useState(null);
+  const [pushLoading, setPushLoading] = useState(false);
+  const [pushError, setPushError] = useState(null);
+  const [isMockToken, setIsMockToken] = useState(false);
 
   const registerTokenWithServer = useCallback(
     (token) => {
@@ -25,34 +28,44 @@ export function usePushNotifications(socket, session) {
       setPermission(perm);
 
       if (perm === 'granted') {
-        const token = await fetchFCMToken();
-        if (token) {
-          setFcmToken(token);
-          registerTokenWithServer(token);
-          return token;
+        setPushLoading(true);
+        setPushError(null);
+        const res = await fetchFCMToken();
+        setPushLoading(false);
+
+        if (res.error) {
+          setPushError(res.error);
+          return null;
+        }
+        if (res.token) {
+          setFcmToken(res.token);
+          setIsMockToken(!!res.isMock);
+          registerTokenWithServer(res.token);
+          return res.token;
         }
       }
     } catch (err) {
       console.error('Error requesting push permission:', err);
+      setPushLoading(false);
+      setPushError(err.message || 'Error requesting browser permission');
     }
     return null;
   }, [registerTokenWithServer]);
 
   // Auto-register if permission is already granted
   useEffect(() => {
-    if (permission === 'granted' && socket && session) {
+    if (permission === 'granted' && socket && session && !fcmToken && !pushLoading) {
       requestPermissionAndRegister();
     }
-  }, [permission, socket, session, requestPermissionAndRegister]);
+  }, [permission, socket, session, fcmToken, pushLoading, requestPermissionAndRegister]);
 
   // Listen for foreground notifications
   useEffect(() => {
     const unsubscribe = onForegroundMessage((payload) => {
       console.log('🔔 Foreground message:', payload);
-      // If needed, custom foreground alerts can be handled here
     });
     return () => unsubscribe();
   }, []);
 
-  return { permission, fcmToken, requestPermissionAndRegister };
+  return { permission, fcmToken, pushLoading, pushError, isMockToken, requestPermissionAndRegister };
 }

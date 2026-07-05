@@ -39,15 +39,19 @@ export async function initFirebase() {
 export async function fetchFCMToken() {
   const msg = await initFirebase();
   if (!msg) {
-    // Return a mock token for testing if Firebase isn't configured
     const mockToken = `mock-token-${Math.random().toString(36).substring(2, 10)}`;
     console.log('Using fallback mock FCM token:', mockToken);
-    return mockToken;
+    return { token: mockToken, isMock: true };
   }
 
   const vapidKey = import.meta.env.VITE_FIREBASE_VAPID_KEY;
+  if (!vapidKey) {
+    const err = 'Missing VITE_FIREBASE_VAPID_KEY in Vercel Environment Variables!';
+    console.error('❌', err);
+    return { error: err };
+  }
+
   try {
-    // Ensure service worker is registered for push notifications
     let swRegistration = null;
     if ('serviceWorker' in navigator) {
       swRegistration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
@@ -57,10 +61,10 @@ export async function fetchFCMToken() {
       vapidKey,
       serviceWorkerRegistration: swRegistration || undefined,
     });
-    return token;
+    return { token, isMock: false };
   } catch (error) {
     console.error('❌ Error retrieving FCM token:', error);
-    return null;
+    return { error: error.message || 'Failed to generate Firebase push token' };
   }
 }
 

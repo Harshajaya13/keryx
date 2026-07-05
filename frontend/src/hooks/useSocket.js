@@ -36,7 +36,7 @@ export function useSocket(serverUrl, session) {
     try { return JSON.parse(localStorage.getItem('fl_offline_queue') || '[]'); } catch { return []; }
   });
 
-  const { permission, requestPermissionAndRegister } = usePushNotifications(socketRef.current, session);
+  const { permission, fcmToken, pushLoading, pushError, isMockToken, requestPermissionAndRegister } = usePushNotifications(socketRef.current, session);
 
   useEffect(() => {
     try { localStorage.setItem('fl_offline_queue', JSON.stringify(offlineQueue)); } catch {}
@@ -436,6 +436,10 @@ export function useSocket(serverUrl, session) {
     unreadCount,
     markAsRead,
     pushPermission: permission,
+    fcmToken,
+    pushLoading,
+    pushError,
+    isMockToken,
     requestPushPermission: requestPermissionAndRegister,
   };
 }

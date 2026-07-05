@@ -112,7 +112,25 @@ export default function App() {
           </div>
         )}
 
-        {pushPermission === 'default' && (
+        {pushLoading && (
+          <div style={{
+            background: '#007aff', color: '#fff', padding: '8px 12px', fontSize: '13px',
+            textAlign: 'center', fontWeight: 'bold', animation: 'fadeIn 0.2s'
+          }}>
+            ⏳ Generating secure push token with Firebase... Please wait...
+          </div>
+        )}
+
+        {pushError && (
+          <div style={{
+            background: '#ff3b30', color: '#fff', padding: '8px 12px', fontSize: '13px',
+            textAlign: 'center', fontWeight: 'bold', animation: 'fadeIn 0.2s'
+          }}>
+            ⚠️ Push Error: {pushError}. (Check VITE_FIREBASE_VAPID_KEY in Vercel settings!)
+          </div>
+        )}
+
+        {!pushLoading && !pushError && pushPermission === 'default' && (
           <div className="push-permission-banner" style={{
             background: '#ff9800', color: '#000', padding: '8px 12px', fontSize: '13px',
             display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontWeight: '500'
@@ -124,6 +142,15 @@ export default function App() {
             >
               Enable Push
             </button>
+          </div>
+        )}
+
+        {fcmToken && isMockToken && (
+          <div style={{
+            background: '#ffcc00', color: '#000', padding: '6px 12px', fontSize: '12px',
+            textAlign: 'center', fontWeight: 'bold'
+          }}>
+            ℹ️ Using local fallback push token. Add Firebase keys in Vercel/Render for live background wake-ups.
           </div>
         )}
 
@@ -185,7 +212,7 @@ export default function App() {
         </div>
 
         <div className="room-badge" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span>Security: <span className="room-code" style={{ color: '#34c759' }}>Protected 🔒 (v4 Hardened)</span></span>
+          <span>Security: <span className="room-code" style={{ color: '#34c759' }}>Protected 🔒</span> | Push: <span style={{ color: fcmToken ? (isMockToken ? '#ffcc00' : '#34c759') : '#8e8e93', fontWeight: 'bold' }}>{fcmToken ? (isMockToken ? 'Mock Mode ℹ️' : 'Live 🔔') : 'Off 🔕'}</span></span>
           <button
             onClick={() => setShowHistory(!showHistory)}
             style={{

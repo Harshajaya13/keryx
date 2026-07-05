@@ -1,5 +1,53 @@
 import { useEffect, useState } from 'react';
 
+// Helper: generate a clean telephone ringtone WAV data URI in memory
+const createRingtoneWavUrl = () => {
+  const sampleRate = 22050;
+  const duration = 3.0; // 3 seconds loop (0.4s beep, 0.1s silence, 0.4s beep, 2.1s silence)
+  const numSamples = sampleRate * duration;
+  const buffer = new ArrayBuffer(44 + numSamples * 2);
+  const view = new DataView(buffer);
+
+  const writeString = (offset, string) => {
+    for (let i = 0; i < string.length; i++) {
+      view.setUint8(offset + i, string.charCodeAt(i));
+    }
+  };
+  writeString(0, 'RIFF');
+  view.setUint32(4, 36 + numSamples * 2, true);
+  writeString(8, 'WAVE');
+  writeString(12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  writeString(36, 'data');
+  view.setUint32(40, numSamples * 2, true);
+
+  for (let i = 0; i < numSamples; i++) {
+    const t = i / sampleRate;
+    let sample = 0;
+    if ((t >= 0 && t < 0.4) || (t >= 0.5 && t < 0.9)) {
+      let env = 1.0;
+      const beepTime = t < 0.4 ? t : t - 0.5;
+      if (beepTime < 0.05) env = beepTime / 0.05;
+      else if (beepTime > 0.35) env = (0.4 - beepTime) / 0.05;
+
+      const s1 = Math.sin(2 * Math.PI * 440 * t);
+      const s2 = Math.sin(2 * Math.PI * 480 * t);
+      sample = 0.35 * (s1 + s2) * env;
+    }
+    const intSample = Math.max(-32768, Math.min(32767, Math.floor(sample * 32767)));
+    view.setInt16(44 + i * 2, intSample, true);
+  }
+
+  const blob = new Blob([buffer], { type: 'audio/wav' });
+  return URL.createObjectURL(blob);
+};
+
 export default function CallScreen({ callState, otherName, onAnswer, onReject, onEnd, onToggleMute, isMuted }) {
   const [elapsed, setElapsed] = useState(0);
 
@@ -9,73 +57,51 @@ export default function CallScreen({ callState, otherName, onAnswer, onReject, o
     return () => clearInterval(t);
   }, [callState]);
 
-  // Play ringing sound and show OS notification for incoming calls
+  // Play continuous HTML5 audio ringtone loop so browsers NEVER throttle sound when tab is in background
   useEffect(() => {
-    if (callState !== 'incoming') return;
-    let audioCtx = null;
-    let intervalId = null;
+    if (callState !== 'incoming' && callState !== 'calling') return;
+    let audioEl = null;
 
     try {
-      const AudioContext = window.AudioContext || window.webkitAudioContext;
-      if (AudioContext) {
-        audioCtx = new AudioContext();
-        
-        const playRingTone = () => {
-          if (audioCtx.state === 'suspended') audioCtx.resume();
-          const now = audioCtx.currentTime;
-          
-          // First beep (440Hz + 480Hz classic phone ring)
-          const osc1 = audioCtx.createOscillator();
-          const osc2 = audioCtx.createOscillator();
-          const gain = audioCtx.createGain();
-          
-          osc1.type = 'sine'; osc1.frequency.setValueAtTime(440, now);
-          osc2.type = 'sine'; osc2.frequency.setValueAtTime(480, now);
-          
-          gain.gain.setValueAtTime(0.15, now);
-          gain.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
-          
-          osc1.connect(gain); osc2.connect(gain); gain.connect(audioCtx.destination);
-          osc1.start(now); osc2.start(now);
-          osc1.stop(now + 0.4); osc2.stop(now + 0.4);
-          
-          // Second beep
-          const osc3 = audioCtx.createOscillator();
-          const osc4 = audioCtx.createOscillator();
-          const gain2 = audioCtx.createGain();
-          
-          osc3.type = 'sine'; osc3.frequency.setValueAtTime(440, now + 0.5);
-          osc4.type = 'sine'; osc4.frequency.setValueAtTime(480, now + 0.5);
-          
-          gain2.gain.setValueAtTime(0.15, now + 0.5);
-          gain2.gain.exponentialRampToValueAtTime(0.01, now + 0.9);
-          
-          osc3.connect(gain2); osc4.connect(gain2); gain2.connect(audioCtx.destination);
-          osc3.start(now + 0.5); osc4.start(now + 0.5);
-          osc3.stop(now + 0.9); osc4.stop(now + 0.9);
-        };
-
-        playRingTone();
-        intervalId = setInterval(playRingTone, 3000);
-      }
+      const wavUrl = createRingtoneWavUrl();
+      audioEl = new Audio(wavUrl);
+      audioEl.loop = true;
+      audioEl.volume = 0.8;
+      audioEl.play().catch((err) => {
+        console.warn('Audio play blocked by browser policy:', err);
+      });
     } catch (e) {
       console.warn('Audio ringtone error:', e);
     }
 
-    // Trigger OS notification if out of tab
-    if (typeof Notification !== 'undefined' && Notification.permission === 'granted' && document.visibilityState === 'hidden') {
-      try {
-        new Notification(`📞 Incoming Voice Call`, {
-          body: `${otherName} is calling you on Keryx! Click to answer.`,
-          icon: '/icons/icon-192.png',
-          requireInteraction: true,
+    // Trigger reliable OS/system notification if out of tab
+    if (callState === 'incoming' && typeof Notification !== 'undefined' && Notification.permission === 'granted' && document.visibilityState === 'hidden') {
+      const title = `📞 Incoming Voice Call`;
+      const options = {
+        body: `${otherName} is calling you on Keryx! Click to answer.`,
+        icon: '/icons/icon-192.png',
+        badge: '/icons/icon-192.png',
+        requireInteraction: true,
+        vibrate: [200, 100, 200, 100, 200, 100, 400],
+        tag: 'keryx-call',
+      };
+
+      if ('serviceWorker' in navigator && navigator.serviceWorker.ready) {
+        navigator.serviceWorker.ready.then((reg) => {
+          reg.showNotification(title, options);
+        }).catch(() => {
+          try { new Notification(title, options); } catch (e) {}
         });
-      } catch (e) {}
+      } else {
+        try { new Notification(title, options); } catch (e) {}
+      }
     }
 
     return () => {
-      if (intervalId) clearInterval(intervalId);
-      if (audioCtx) audioCtx.close().catch(() => {});
+      if (audioEl) {
+        audioEl.pause();
+        audioEl.src = '';
+      }
     };
   }, [callState, otherName]);
 

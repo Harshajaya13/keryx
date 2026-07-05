@@ -155,6 +155,29 @@ export function useSocket(serverUrl, session) {
       setCallState('incoming');
       setIsEmergencyCall(!!data.isEmergency);
       setIncomingOffer(data.offer);
+
+      // Trigger reliable OS/system notification for incoming call when tab is in background or minimized
+      if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+        const title = data.isEmergency ? '🚨 EMERGENCY VOICE CALL' : '📞 Incoming Voice Call';
+        const options = {
+          body: `${data.from || 'Partner'} is calling you on Keryx! Tap to answer.`,
+          icon: '/icons/icon-192.png',
+          badge: '/icons/icon-192.png',
+          requireInteraction: true,
+          vibrate: [200, 100, 200, 100, 200, 100, 400],
+          tag: 'keryx-call',
+        };
+
+        if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.ready.then((reg) => {
+            reg.showNotification(title, options);
+          }).catch(() => {
+            try { new Notification(title, options); } catch (e) {}
+          });
+        } else {
+          try { new Notification(title, options); } catch (e) {}
+        }
+      }
     });
 
     socket.on('call-answered', async (data) => {

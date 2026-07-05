@@ -1,4 +1,4 @@
-/* ── Keryx Messenger Loading Experience ──────────────────────────────────── */
+/* ── Keryx Event-Driven Story Loading Experience ─────────────────────────── */
 
 .keryx-loader-container {
   position: fixed;
@@ -8,7 +8,7 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(145deg, #121318 0%, #1a1d28 50%, #232536 100%);
+  background: linear-gradient(145deg, #101217 0%, #1a1d28 50%, #242738 100%);
   color: #ffffff;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   overflow: hidden;
@@ -27,12 +27,12 @@
   top: 15%;
   left: 50%;
   transform: translateX(-50%);
-  width: 320px;
-  height: 320px;
-  background: radial-gradient(circle, rgba(255, 179, 71, 0.15) 0%, rgba(255, 140, 0, 0.05) 50%, transparent 70%);
+  width: 360px;
+  height: 360px;
+  background: radial-gradient(circle, rgba(255, 179, 71, 0.16) 0%, rgba(255, 140, 0, 0.05) 50%, transparent 70%);
   border-radius: 50%;
   pointer-events: none;
-  filter: blur(20px);
+  filter: blur(24px);
   animation: pulseGlow 6s ease-in-out infinite;
 }
 
@@ -58,39 +58,39 @@
 }
 
 .cloud-1 {
-  top: 25%;
+  top: 22%;
   left: -150px;
-  width: 140px;
-  animation: cloudDrift 22s linear infinite;
+  width: 150px;
+  animation: cloudDrift 24s linear infinite;
 }
 
 .cloud-2 {
-  top: 45%;
+  top: 48%;
   left: -200px;
-  width: 180px;
-  animation: cloudDrift 30s linear infinite;
-  animation-delay: -10s;
+  width: 190px;
+  animation: cloudDrift 32s linear infinite;
+  animation-delay: -12s;
 }
 
 .cloud-3 {
-  top: 20%;
+  top: 18%;
   left: -120px;
-  width: 100px;
-  animation: cloudDrift 26s linear infinite;
-  animation-delay: -18s;
+  width: 110px;
+  animation: cloudDrift 28s linear infinite;
+  animation-delay: -20s;
 }
 
 @keyframes cloudDrift {
-  0% { transform: translateX(-10vw); }
-  100% { transform: translateX(110vw); }
+  0% { transform: translateX(-15vw); }
+  100% { transform: translateX(115vw); }
 }
 
 /* ── Story Illustration Stage ────────────────────────────────────────────── */
 .illustration-stage {
   position: relative;
-  width: 340px;
-  height: 200px;
-  margin-bottom: 32px;
+  width: 360px;
+  height: 220px;
+  margin-bottom: 36px;
   display: flex;
   align-items: center;
 }
@@ -98,10 +98,10 @@
 /* ── The Nest & Tree Branch ─────────────────────────────────────────────── */
 .nest-container {
   position: absolute;
-  right: 20px;
+  right: 25px;
   bottom: 30px;
-  width: 110px;
-  height: 90px;
+  width: 130px;
+  height: 100px;
   z-index: 2;
 }
 
@@ -109,66 +109,136 @@
   position: absolute;
   right: -30px;
   bottom: 0px;
-  width: 150px;
-  height: 70px;
+  width: 170px;
+  height: 75px;
   z-index: 1;
 }
 
-.chick-svg {
+.nest-svg {
   position: absolute;
-  right: 42px;
-  bottom: 38px;
+  bottom: 12px;
+  right: 20px;
+  width: 86px;
+  height: 40px;
+  z-index: 3;
+}
+
+/* ── Brother Chick Staging ──────────────────────────────────────────────── */
+.chick-container {
+  position: absolute;
   width: 44px;
   height: 44px;
   z-index: 2;
   transform-origin: bottom center;
-  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transition: all 0.7s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
-.chick-svg.waiting {
-  animation: chickBounce 3s ease-in-out infinite;
+/* When Mom opens: Brother is resting peacefully inside nest */
+.chick-container.in-nest {
+  right: 45px;
+  bottom: 40px;
+  animation: chickBreathe 3s ease-in-out infinite;
 }
 
-.chick-svg.happy {
+/* When Brother opens: Brother is outside nest on the branch calling Mom */
+.chick-container.on-branch {
+  right: 100px;
+  bottom: 45px;
+  animation: chickChirpBounce 1.5s ease-in-out infinite;
+}
+
+/* When Landed: Brother hops joyfully next to Mom inside nest */
+.chick-container.reunited-nest {
+  right: 35px;
+  bottom: 42px;
   animation: chickJoy 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) infinite alternate;
 }
 
-@keyframes chickBounce {
+@keyframes chickBreathe {
   0%, 100% { transform: translateY(0) scale(1); }
-  50% { transform: translateY(-3px) scale(1.02, 0.98); }
+  50% { transform: translateY(-2px) scale(1.02, 0.98); }
+}
+
+@keyframes chickChirpBounce {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  30% { transform: translateY(-6px) rotate(-6deg); }
+  50% { transform: translateY(0) rotate(0deg); }
+  70% { transform: translateY(-3px) rotate(4deg); }
 }
 
 @keyframes chickJoy {
   0% { transform: translateY(0) scale(1, 1); }
-  100% { transform: translateY(-8px) scale(1.08, 0.94); }
+  100% { transform: translateY(-10px) scale(1.08, 0.92); }
 }
 
-/* ── Flying Messenger Bird ──────────────────────────────────────────────── */
+/* Chirping sound notes when Brother is calling for Mom */
+.chirp-notes {
+  position: absolute;
+  left: -20px;
+  top: -10px;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.note {
+  position: absolute;
+  font-size: 14px;
+  opacity: 0;
+  animation: floatNote 1.8s ease-out infinite;
+}
+
+.note-1 { left: 0px; top: 0px; animation-delay: 0s; }
+.note-2 { left: -15px; top: -10px; animation-delay: 0.6s; font-size: 16px; }
+
+@keyframes floatNote {
+  0% { opacity: 0; transform: translate(0, 0) scale(0.6); }
+  30% { opacity: 1; transform: translate(-10px, -12px) scale(1.1); }
+  80% { opacity: 0.7; transform: translate(-25px, -28px) scale(0.9); }
+  100% { opacity: 0; transform: translate(-35px, -38px) scale(0.5); }
+}
+
+/* ── Mom Bird (Flying Messenger) ────────────────────────────────────────── */
 .bird-container {
   position: absolute;
-  left: 20px;
-  bottom: 60px;
-  width: 64px;
-  height: 52px;
-  z-index: 3;
+  left: -80px;
+  bottom: 70px;
+  width: 72px;
+  height: 58px;
+  z-index: 4;
   transition: left 0.8s cubic-bezier(0.25, 1, 0.5, 1), bottom 0.8s cubic-bezier(0.25, 1, 0.5, 1), transform 0.8s cubic-bezier(0.25, 1, 0.5, 1);
 }
 
 .bird-container.flying {
-  left: 42%;
-  bottom: 75px;
-  animation: birdHover 2.4s ease-in-out infinite alternate;
+  left: 38%;
+  bottom: 85px;
+  animation: birdHover 2.2s ease-in-out infinite alternate;
 }
 
-.bird-container.landing {
-  left: calc(100% - 130px);
-  bottom: 55px;
+/* When slow, Mom circles calmly around the sky near the nest */
+.bird-container.circling {
+  left: 45%;
+  bottom: 110px;
+  animation: birdCircle 4s ease-in-out infinite;
+}
+
+@keyframes birdCircle {
+  0% { transform: translate(0, 0) rotate(-4deg); }
+  25% { transform: translate(25px, -15px) rotate(4deg); }
+  50% { transform: translate(5px, -25px) rotate(2deg); }
+  75% { transform: translate(-20px, -10px) rotate(-6deg); }
+  100% { transform: translate(0, 0) rotate(-4deg); }
+}
+
+/* When Landed, Mom rests safely in the nest */
+.bird-container.landed {
+  left: calc(100% - 150px);
+  bottom: 62px;
   transform: scale(0.95);
 }
 
 @keyframes birdHover {
-  0% { transform: translateY(-6px) rotate(-3deg); }
-  100% { transform: translateY(6px) rotate(2deg); }
+  0% { transform: translateY(-7px) rotate(-3deg); }
+  100% { transform: translateY(7px) rotate(2deg); }
 }
 
 .bird-wing-left,
@@ -176,65 +246,68 @@
   transform-origin: 50% 50%;
 }
 
-.bird-container.flying .bird-wing-left {
-  animation: wingFlapLeft 0.6s ease-in-out infinite alternate;
+.bird-container.flying .bird-wing-left,
+.bird-container.circling .bird-wing-left {
+  animation: wingFlapLeft 0.55s ease-in-out infinite alternate;
 }
 
-.bird-container.flying .bird-wing-right {
-  animation: wingFlapRight 0.6s ease-in-out infinite alternate;
+.bird-container.flying .bird-wing-right,
+.bird-container.circling .bird-wing-right {
+  animation: wingFlapRight 0.55s ease-in-out infinite alternate;
 }
 
 @keyframes wingFlapLeft {
   0% { transform: rotate(0deg) translateY(0); }
-  100% { transform: rotate(-35deg) translateY(-4px); }
+  100% { transform: rotate(-38deg) translateY(-5px); }
 }
 
 @keyframes wingFlapRight {
   0% { transform: rotate(0deg) translateY(0); }
-  100% { transform: rotate(35deg) translateY(-4px); }
+  100% { transform: rotate(38deg) translateY(-5px); }
 }
 
-/* ── Joyful Hearts & Notes when Landed ──────────────────────────────────── */
+/* ── Joyful Hearts & Stars when Family Reunited ─────────────────────────── */
 .reaction-particles {
   position: absolute;
-  right: 35px;
-  bottom: 75px;
+  right: 40px;
+  bottom: 80px;
   pointer-events: none;
-  z-index: 4;
+  z-index: 6;
 }
 
 .particle {
   position: absolute;
   opacity: 0;
-  font-size: 16px;
+  font-size: 18px;
   animation: floatUpParticle 1.4s ease-out infinite;
 }
 
 .particle-1 { left: 0px; animation-delay: 0s; }
-.particle-2 { left: 25px; animation-delay: 0.4s; font-size: 14px; }
-.particle-3 { left: -15px; animation-delay: 0.8s; font-size: 18px; }
+.particle-2 { left: 30px; animation-delay: 0.3s; font-size: 15px; }
+.particle-3 { left: -15px; animation-delay: 0.6s; font-size: 20px; }
+.particle-4 { left: 15px; animation-delay: 0.9s; font-size: 16px; }
 
 @keyframes floatUpParticle {
   0% { opacity: 0; transform: translateY(0) scale(0.5); }
-  30% { opacity: 1; transform: translateY(-15px) scale(1.1); }
-  80% { opacity: 0.8; transform: translateY(-35px) scale(0.9); }
-  100% { opacity: 0; transform: translateY(-45px) scale(0.6); }
+  30% { opacity: 1; transform: translateY(-18px) scale(1.15); }
+  80% { opacity: 0.85; transform: translateY(-40px) scale(0.9); }
+  100% { opacity: 0; transform: translateY(-55px) scale(0.5); }
 }
 
 /* ── Story Text & Status Display ────────────────────────────────────────── */
 .loader-content {
   text-align: center;
-  z-index: 5;
-  max-width: 320px;
+  z-index: 10;
+  max-width: 340px;
   padding: 0 16px;
 }
 
 .loader-title {
-  font-size: 20px;
+  font-size: 21px;
   font-weight: 700;
   letter-spacing: -0.3px;
   margin: 0 0 8px 0;
-  background: linear-gradient(135deg, #ffffff 0%, #a0a6c0 100%);
+  background: linear-gradient(135deg, #ffffff 0%, #a2a8c2 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
@@ -242,9 +315,9 @@
 .loader-subtitle {
   font-size: 14px;
   color: #8e94ab;
-  margin: 0 0 20px 0;
+  margin: 0 0 22px 0;
   line-height: 1.5;
-  min-height: 42px;
+  min-height: 44px;
   transition: opacity 0.3s ease;
 }
 
@@ -252,25 +325,25 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 16px;
-  border-radius: 20px;
+  padding: 9px 18px;
+  border-radius: 24px;
   font-size: 13px;
   font-weight: 600;
   transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
 }
 
 .status-badge.connecting {
   background: rgba(255, 149, 0, 0.15);
   color: #ffaa33;
-  border: 1px solid rgba(255, 149, 0, 0.3);
+  border: 1px solid rgba(255, 149, 0, 0.35);
 }
 
 .status-badge.connected {
-  background: rgba(52, 199, 89, 0.2);
+  background: rgba(52, 199, 89, 0.22);
   color: #34c759;
-  border: 1px solid rgba(52, 199, 89, 0.4);
-  transform: scale(1.05);
+  border: 1px solid rgba(52, 199, 89, 0.45);
+  transform: scale(1.06);
 }
 
 .pulse-dot {
@@ -286,22 +359,26 @@
 
 @keyframes badgePulse {
   0%, 100% { opacity: 0.3; transform: scale(0.8); }
-  50% { opacity: 1; transform: scale(1.2); }
+  50% { opacity: 1; transform: scale(1.25); }
 }
 
 /* ── Accessibility: Reduced Motion ──────────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
   .cloud,
   .morning-glow,
-  .chick-svg.waiting,
+  .chick-container.in-nest,
+  .chick-container.on-branch,
   .bird-container.flying,
-  .bird-container.flying .bird-wing-left,
-  .bird-container.flying .bird-wing-right,
-  .particle {
+  .bird-container.circling,
+  .bird-container .bird-wing-left,
+  .bird-container .bird-wing-right,
+  .particle,
+  .note {
     animation: none !important;
   }
   
-  .bird-container {
-    transition: left 0.3s linear, bottom 0.3s linear;
+  .bird-container,
+  .chick-container {
+    transition: left 0.3s linear, bottom 0.3s linear, right 0.3s linear;
   }
 }

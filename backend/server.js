@@ -8,7 +8,7 @@ const bcrypt = require('bcryptjs');
 const { sendPushNotification } = require('./services/fcm');
 const db = require('./services/db');
 
-// ── Strict Family Key Requirement (Phase 3 Requirement 2) ──
+// ── Strict Family Key Requirement (Phase 3 & 4 Requirement) ──
 if (!process.env.FAMILY_KEY_HASH) {
   console.error('❌ FATAL ERROR: FAMILY_KEY_HASH environment variable must be configured.');
   console.error('❌ Never silently use a default key in production or development. Refusing to start.');
@@ -57,12 +57,22 @@ const getSanitizedFrontendUrl = () => {
 };
 const FRONTEND_URL = getSanitizedFrontendUrl();
 
+// ── Phase 4: HTTP Security Headers Hardening ───────────
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  res.setHeader('Content-Security-Policy', "default-src 'self'; connect-src *; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;");
+  next();
+});
+
 app.use(cors({ origin: [FRONTEND_URL, 'http://localhost:5173'] }));
-app.use(express.json());
+app.use(express.json({ limit: '1mb' }));
 
 // Health check endpoint
 app.get('/', (req, res) => {
-  res.send('Family Link API is running (Protected by Phase 3 Security)');
+  res.send('Family Link API v4.0 is running (Hardened Production Mode)');
 });
 
 // ── Admin Notification Helper ──────────────────────────
@@ -94,7 +104,8 @@ app.post('/api/verify-key', async (req, res) => {
   const { familyKey, userName } = req.body;
   const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown';
 
-  if (!userName || !['Mom', 'Brother'].includes(userName)) {
+  const cleanUserName = typeof userName === 'string' ? userName.trim() : '';
+  if (!cleanUserName || !['Mom', 'Brother'].includes(cleanUserName)) {
     return res.status(400).json({ error: 'Please select a valid identity (Mom or Brother)' });
   }
 
@@ -118,8 +129,8 @@ app.post('/api/verify-key', async (req, res) => {
   }
 
   // Generate 30-day signed session token
-  const token = generateSessionToken(userName);
-  res.json({ success: true, token, userName });
+  const token = generateSessionToken(cleanUserName);
+  res.json({ success: true, token, userName: cleanUserName });
 });
 
 // Protected API Middleware
@@ -133,13 +144,13 @@ function requireAuth(req, res, next) {
   next();
 }
 
-// Get messages (Protected, no room code required by client)
+// Get messages (Protected)
 app.get('/api/messages', requireAuth, (req, res) => {
   const messages = db.getMessages('FAMILY', 500);
   res.json({ messages });
 });
 
-// Get call logs (Protected, no room code required by client)
+// Get call logs (Protected)
 app.get('/api/calls', requireAuth, (req, res) => {
   const logs = db.getCallLogs('FAMILY', 100);
   res.json({ logs });
@@ -168,22 +179,14 @@ io.on('connection', (socket) => {
   socket.callAttempts = [];
 
   socket.on('join-room', ({ token }) => {
-    // Validate signed session token
     const userName = verifySessionToken(token);
     if (!userName) {
       socket.emit('join-error', 'Session expired or invalid. Please re-enter Family Key.');
       return;
     }
 
-    const code = 'FAMILY'; // Single private family room internally
+    const code = 'FAMILY';
     const room = rooms[code];
-
-    // Check if name taken by another socket
-    const nameTaken = Object.entries(room.users).some(([sid, name]) => name === userName && sid !== socket.id);
-    if (nameTaken) {
-      // If same user reconnecting from new tab/connection, allow takeover
-      console.log(`Takeover connection for ${userName}`);
-    }
 
     if (Object.keys(room.users).length >= 2 && !room.users[socket.id]) {
       socket.emit('join-error', 'Room is full (max 2 people)');
@@ -233,7 +236,14 @@ io.on('connection', (socket) => {
   socket.on('chat-message', (msg) => {
     if (!socket.roomCode || !socket.userName) return;
     const room = rooms[socket.roomCode];
-    if (!room) return;
+    if (!room || !msg || typeof msg.text !== 'string') return;
+
+    // Phase 4 Input Sanitization & Length Check
+    const trimmedText = msg.text.trim();
+    if (!trimmedText || trimmedText.length > 2000) {
+      socket.emit('call-error', 'Message must be between 1 and 2000 characters.');
+      return;
+    }
 
     const targetSocketId = getOtherSocket(socket);
     const initialStatus = targetSocketId ? 'delivered' : 'sent';
@@ -242,7 +252,7 @@ io.on('connection', (socket) => {
       id: crypto.randomUUID(),
       roomCode: socket.roomCode,
       sender: socket.userName,
-      text: msg.text,
+      text: trimmedText,
       time: Date.now(),
       status: initialStatus,
       isEmergency: msg.isEmergency ? 1 : 0,
@@ -270,7 +280,7 @@ io.on('connection', (socket) => {
       if (partnerToken) {
         sendPushNotification(partnerToken, {
           title: msg.isEmergency ? `🚨 EMERGENCY from ${socket.userName}` : `Message from ${socket.userName}`,
-          body: msg.text,
+          body: trimmedText,
           data: {
             type: 'chat',
             roomCode: socket.roomCode,
@@ -439,5 +449,11 @@ function broadcastRoomStatus(code) {
 }
 
 server.listen(PORT, () => {
-  console.log(`Family Link server running on port ${PORT}`);
+  console.log('───────────────────────────────────────────────────────');
+  console.log(`🚀 Keryx Backend v4.0 running on port ${PORT}`);
+  console.log(`🔒 Security: Strict Bcrypt & 30d Session Tokens ENABLED`);
+  console.log(`🛡️ Headers: CSP, HSTS, X-Content-Type-Options ENABLED`);
+  console.log(`🌐 Frontend Allowed Origin: ${FRONTEND_URL}`);
+  console.log(`📦 SQLite (sql.js) Persistence: ENABLED`);
+  console.log('───────────────────────────────────────────────────────');
 });

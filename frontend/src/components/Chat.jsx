@@ -13,7 +13,7 @@ export default function Chat({ messages, userName, onSend, connected, partnerTyp
 
   const handleSend = (e) => {
     e.preventDefault();
-    if (!text.trim() || !connected) return;
+    if (!text.trim()) return;
     onSend(text, isEmergency);
     setText('');
     setIsEmergency(false);
@@ -55,10 +55,12 @@ export default function Chat({ messages, userName, onSend, connected, partnerTyp
     return 'Older messages (' + d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ')';
   };
 
+  // Phase 4: Friendly Status & Waiting to Send icon
   const getStatusIcon = (status) => {
-    if (status === 'read') return <span style={{ color: '#34c759', fontWeight: 'bold', marginLeft: '4px' }}>✓✓</span>;
-    if (status === 'delivered') return <span style={{ color: '#8e8e93', fontWeight: 'bold', marginLeft: '4px' }}>✓✓</span>;
-    return <span style={{ color: '#8e8e93', marginLeft: '4px' }}>✓</span>;
+    if (status === 'waiting') return <span style={{ color: '#ff9500', fontWeight: 'bold', marginLeft: '6px', fontSize: '11px', fontStyle: 'italic' }}>🕒 Waiting to send...</span>;
+    if (status === 'read') return <span style={{ color: '#34c759', fontWeight: 'bold', marginLeft: '4px' }} title="Read">✓✓</span>;
+    if (status === 'delivered') return <span style={{ color: '#8e8e93', fontWeight: 'bold', marginLeft: '4px' }} title="Delivered">✓✓</span>;
+    return <span style={{ color: '#8e8e93', marginLeft: '4px' }} title="Sent">✓</span>;
   };
 
   // Group consecutive messages by same sender
@@ -183,10 +185,9 @@ export default function Chat({ messages, userName, onSend, connected, partnerTyp
             onChange={handleTextChange}
             placeholder={isEmergency ? "🚨 Type emergency message..." : "Message"}
             autoComplete="off"
-            disabled={!connected}
             style={isEmergency ? { borderColor: '#ff3b30', background: '#ff3b3010' } : {}}
           />
-          <button type="submit" className="send-btn" disabled={!text.trim() || !connected} aria-label="Send"
+          <button type="submit" className="send-btn" disabled={!text.trim()} aria-label="Send"
             style={isEmergency ? { background: '#ff3b30' } : {}}
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none">

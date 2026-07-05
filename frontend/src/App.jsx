@@ -14,9 +14,11 @@ const SERVER_URL = getSanitizedServerUrl();
 export default function App() {
   const [session, setSession] = useState(null); // { token, userName }
   const [showHistory, setShowHistory] = useState(false);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
 
   const {
     connected,
+    isConnectingSlow,
     isSleeping,
     otherUser,
     partnerPresence,
@@ -42,6 +44,17 @@ export default function App() {
   } = useSocket(SERVER_URL, session);
 
   useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  useEffect(() => {
     const saved = localStorage.getItem('fl_session_v3');
     if (saved) {
       try { setSession(JSON.parse(saved)); } catch {}
@@ -63,8 +76,9 @@ export default function App() {
   }
 
   const getStatusText = () => {
+    if (!isOnline) return 'Offline (No Internet) 📵';
     if (isSleeping) return 'Sleeping 💤 (Push active)';
-    if (!connected) return 'Connecting…';
+    if (!connected) return isConnectingSlow ? 'Waking server... Just a moment! ⏳' : 'Connecting…';
     if (otherUser || partnerPresence?.status === 'online') return 'Online 🟢';
     if (partnerPresence?.status === 'in_call') return 'In Call 📞';
     if (partnerPresence?.lastSeen) {
@@ -80,6 +94,24 @@ export default function App() {
   return (
     <div className="app" style={{ position: 'relative' }}>
       <header className="app-header">
+        {!isOnline && (
+          <div style={{
+            background: '#ff3b30', color: '#fff', padding: '8px 12px', fontSize: '13px',
+            textAlign: 'center', fontWeight: 'bold', animation: 'fadeIn 0.2s'
+          }}>
+            📵 No internet connection. Your messages will send automatically when you're back online.
+          </div>
+        )}
+
+        {isOnline && !connected && isConnectingSlow && (
+          <div style={{
+            background: '#ff9500', color: '#000', padding: '8px 12px', fontSize: '13px',
+            textAlign: 'center', fontWeight: 'bold', animation: 'fadeIn 0.2s'
+          }}>
+            ⏳ Connection lost or server waking up. Trying to reconnect...
+          </div>
+        )}
+
         {pushPermission === 'default' && (
           <div className="push-permission-banner" style={{
             background: '#ff9800', color: '#000', padding: '8px 12px', fontSize: '13px',
@@ -135,7 +167,7 @@ export default function App() {
             <button
               className="header-btn call-btn"
               onClick={() => startCall(true)}
-              disabled={!connected || callState !== 'idle'}
+              disabled={(!connected && !isOnline) || callState !== 'idle'}
               title="🚨 Emergency Voice Call (High priority push alert)"
               style={{ background: '#ff3b30', color: 'white', border: 'none' }}
             >
@@ -144,7 +176,7 @@ export default function App() {
             <button
               className="header-btn call-btn"
               onClick={() => startCall(false)}
-              disabled={!connected || callState !== 'idle'}
+              disabled={(!connected && !isOnline) || callState !== 'idle'}
               title="Voice Call"
             >
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
@@ -153,7 +185,7 @@ export default function App() {
         </div>
 
         <div className="room-badge" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span>Security: <span className="room-code" style={{ color: '#34c759' }}>Protected 🔒 (30d Token)</span></span>
+          <span>Security: <span className="room-code" style={{ color: '#34c759' }}>Protected 🔒 (v4 Hardened)</span></span>
           <button
             onClick={() => setShowHistory(!showHistory)}
             style={{

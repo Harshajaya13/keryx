@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { io } from 'socket.io-client';
 import { usePushNotifications } from './usePushNotifications';
 
@@ -16,6 +16,7 @@ export function useSocket(serverUrl, session) {
   const iceCandidateQueue = useRef([]);
 
   const [connected, setConnected] = useState(false);
+  const [isConnectingSlow, setIsConnectingSlow] = useState(false);
   const [isSleeping, setIsSleeping] = useState(false);
   const [otherUser, setOtherUser] = useState(null);
   const [partnerPresence, setPartnerPresence] = useState(null);
@@ -30,7 +31,16 @@ export function useSocket(serverUrl, session) {
   const [unreadCount, setUnreadCount] = useState(0);
   const [partnerTyping, setPartnerTyping] = useState(false);
 
+  // Phase 4: Offline Message Queue in localStorage
+  const [offlineQueue, setOfflineQueue] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('fl_offline_queue') || '[]'); } catch { return []; }
+  });
+
   const { permission, requestPermissionAndRegister } = usePushNotifications(socketRef.current, session);
+
+  useEffect(() => {
+    try { localStorage.setItem('fl_offline_queue', JSON.stringify(offlineQueue)); } catch {}
+  }, [offlineQueue]);
 
   const syncFromRest = useCallback(async () => {
     if (!session?.token) return;
@@ -51,6 +61,18 @@ export function useSocket(serverUrl, session) {
     } catch (err) { console.error('REST sync error:', err); }
   }, [serverUrl, session?.token]);
 
+  // ── Render Cold Start Warning Timer ──────────────────
+  useEffect(() => {
+    if (connected || isSleeping) {
+      setIsConnectingSlow(false);
+      return;
+    }
+    const timer = setTimeout(() => {
+      if (!connected && !isSleeping) setIsConnectingSlow(true);
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, [connected, isSleeping]);
+
   // ── Socket connection ──────────────────────────────
   useEffect(() => {
     if (!session?.token) return;
@@ -65,27 +87,38 @@ export function useSocket(serverUrl, session) {
 
     socket.on('connect', () => {
       setConnected(true);
+      setIsConnectingSlow(false);
       setIsSleeping(false);
       socket.emit('join-room', { token: session.token });
       syncFromRest();
     });
 
-    socket.on('disconnect', () => {
+    socket.on('disconnect', (reason) => {
       setConnected(false);
       setOtherUser(null);
       setPartnerPresence((prev) => prev ? { ...prev, status: 'offline', lastSeen: Date.now() } : null);
+      if (reason === 'io server disconnect' || reason === 'transport close') {
+        // Automatically attempt reconnection
+      }
     });
 
     socket.on('reconnect', () => {
       setConnected(true);
+      setIsConnectingSlow(false);
       setIsSleeping(false);
       socket.emit('join-room', { token: session.token });
       syncFromRest();
     });
 
-    socket.on('join-error', (msg) => setJoinError(msg));
+    // Phase 4 Friendly Error Wording
+    socket.on('join-error', (msg) => {
+      const friendlyMsg = msg.includes('expired') ? 'Session expired. Please log in again.' : msg;
+      setJoinError(friendlyMsg);
+    });
+
     socket.on('call-error', (msg) => {
-      setCallError(msg);
+      const friendlyMsg = msg.includes('Too many') ? 'Too many call attempts. Please wait one minute.' : msg;
+      setCallError(friendlyMsg);
       setTimeout(() => setCallError(null), 5000);
       cleanupCall();
     });
@@ -133,7 +166,12 @@ export function useSocket(serverUrl, session) {
           }
           setCallState('active');
         }
-      } catch (e) { console.error('Answer error:', e); }
+      } catch (e) {
+        console.error('Answer error:', e);
+        setCallError('Unable to connect the call. Please try again.');
+        setTimeout(() => setCallError(null), 5000);
+        cleanupCall();
+      }
     });
 
     socket.on('ice-candidate', async (candidate) => {
@@ -155,17 +193,39 @@ export function useSocket(serverUrl, session) {
     };
   }, [session, serverUrl, syncFromRest]);
 
+  // Phase 4: Clean Resource Release
   const cleanupCall = useCallback(() => {
-    pcRef.current?.close();
-    pcRef.current = null;
-    localStreamRef.current?.getTracks().forEach((t) => t.stop());
-    localStreamRef.current = null;
+    if (pcRef.current) {
+      pcRef.current.onicecandidate = null;
+      pcRef.current.ontrack = null;
+      pcRef.current.close();
+      pcRef.current = null;
+    }
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach((t) => {
+        t.stop();
+        t.enabled = false;
+      });
+      localStreamRef.current = null;
+    }
     iceCandidateQueue.current = [];
     setCallState('idle');
     setIsEmergencyCall(false);
     setIsMuted(false);
     setIncomingOffer(null);
   }, []);
+
+  // ── Phase 4: Automatic Offline Queue Flushing ────────
+  useEffect(() => {
+    if (connected && offlineQueue.length > 0 && socketRef.current) {
+      console.log('🔄 Connection restored! Flushing offline message queue...', offlineQueue.length);
+      offlineQueue.forEach((msg) => {
+        socketRef.current.emit('chat-message', { text: msg.text, isEmergency: msg.isEmergency === 1 });
+      });
+      setOfflineQueue([]);
+      localStorage.removeItem('fl_offline_queue');
+    }
+  }, [connected, offlineQueue]);
 
   // ── Idle Sleep & Reconnect Logic ─────────────────────
   useEffect(() => {
@@ -244,16 +304,26 @@ export function useSocket(serverUrl, session) {
       audio.play().catch(() => {});
     };
     pc.oniceconnectionstatechange = () => {
-      if (['disconnected', 'failed'].includes(pc.iceConnectionState)) cleanupCall();
+      if (['disconnected', 'failed'].includes(pc.iceConnectionState)) {
+        setCallError('Connection lost. Ending call.');
+        setTimeout(() => setCallError(null), 5000);
+        cleanupCall();
+      }
     };
     pcRef.current = pc;
     return pc;
   }, [cleanupCall]);
 
   const getMic = async () => {
-    const s = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-    localStreamRef.current = s;
-    return s;
+    try {
+      const s = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      localStreamRef.current = s;
+      return s;
+    } catch (err) {
+      setCallError('Microphone permission required for voice calls.');
+      setTimeout(() => setCallError(null), 5000);
+      throw err;
+    }
   };
 
   const startCall = useCallback(async (isEmergency = false) => {
@@ -266,7 +336,12 @@ export function useSocket(serverUrl, session) {
       setIsEmergencyCall(isEmergency);
       socketRef.current.emit('call-user', { offer, isEmergency });
       setCallState('calling');
-    } catch (e) { console.error('Call start error:', e); cleanupCall(); }
+    } catch (e) {
+      console.error('Call start error:', e);
+      setCallError('Unable to start the call. Please check microphone settings.');
+      setTimeout(() => setCallError(null), 5000);
+      cleanupCall();
+    }
   }, [createPC, cleanupCall]);
 
   const answerCall = useCallback(async () => {
@@ -283,7 +358,12 @@ export function useSocket(serverUrl, session) {
       socketRef.current.emit('call-answer', { answer });
       setCallState('active');
       setIncomingOffer(null);
-    } catch (e) { console.error('Answer error:', e); cleanupCall(); }
+    } catch (e) {
+      console.error('Answer error:', e);
+      setCallError('Unable to answer call. Please try again.');
+      setTimeout(() => setCallError(null), 5000);
+      cleanupCall();
+    }
   }, [incomingOffer, createPC, cleanupCall]);
 
   const rejectCall = useCallback(() => {
@@ -301,25 +381,45 @@ export function useSocket(serverUrl, session) {
     if (track) { track.enabled = !track.enabled; setIsMuted(!track.enabled); }
   }, []);
 
+  // Phase 4: Send Message with Offline Queue Support
   const sendMessage = useCallback((text, isEmergency = false) => {
-    if (socketRef.current && text.trim()) {
+    if (!text.trim()) return;
+    if (socketRef.current && socketRef.current.connected && navigator.onLine) {
       socketRef.current.emit('chat-message', { text: text.trim(), isEmergency });
+    } else {
+      console.log('📵 Offline or disconnected. Queueing message locally...');
+      const offlineMsg = {
+        id: 'offline_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+        from: session.userName,
+        text: text.trim(),
+        time: Date.now(),
+        status: 'waiting',
+        isEmergency: isEmergency ? 1 : 0,
+        isOffline: true,
+      };
+      setOfflineQueue((prev) => [...prev, offlineMsg]);
     }
-  }, []);
+  }, [session?.userName]);
 
   const emitTyping = useCallback((isTyping) => {
-    if (socketRef.current) {
+    if (socketRef.current && socketRef.current.connected) {
       socketRef.current.emit(isTyping ? 'typing-start' : 'typing-stop');
     }
   }, []);
 
+  // Combine server messages with local offline waiting messages
+  const combinedMessages = useMemo(() => {
+    return [...messages, ...offlineQueue];
+  }, [messages, offlineQueue]);
+
   return {
     connected,
+    isConnectingSlow,
     isSleeping,
     otherUser,
     partnerPresence,
     partnerTyping,
-    messages,
+    messages: combinedMessages,
     callLogs,
     sendMessage,
     emitTyping,
@@ -335,7 +435,7 @@ export function useSocket(serverUrl, session) {
     callError,
     unreadCount,
     markAsRead,
-    pushPermission,
-    requestPushPermission,
+    pushPermission: permission,
+    requestPushPermission: requestPermissionAndRegister,
   };
 }

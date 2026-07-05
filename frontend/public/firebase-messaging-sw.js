@@ -1,7 +1,4 @@
-importScripts('https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js');
-importScripts('https://www.gstatic.com/firebasejs/10.8.0/firebase-messaging-compat.js');
-
-// Standard Firebase background notification handler
+// Standard native Web Push background notification handler
 self.addEventListener('push', (event) => {
   if (!event.data) return;
 

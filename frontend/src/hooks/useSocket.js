@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { io } from 'socket.io-client';
+import { usePushNotifications } from './usePushNotifications';
 
 const ICE_SERVERS = {
   iceServers: [
@@ -15,12 +16,27 @@ export function useSocket(serverUrl, session) {
   const iceCandidateQueue = useRef([]);
 
   const [connected, setConnected] = useState(false);
+  const [isSleeping, setIsSleeping] = useState(false);
   const [otherUser, setOtherUser] = useState(null);
   const [messages, setMessages] = useState([]);
   const [callState, setCallState] = useState('idle');
   const [isMuted, setIsMuted] = useState(false);
   const [incomingOffer, setIncomingOffer] = useState(null);
   const [joinError, setJoinError] = useState(null);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  const { permission, requestPermissionAndRegister } = usePushNotifications(socketRef.current, session);
+
+  const syncMessagesFromRest = useCallback(async () => {
+    if (!session?.roomCode) return;
+    try {
+      const res = await fetch(`${serverUrl}/api/room/${session.roomCode}/messages`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.messages) setMessages(data.messages);
+      }
+    } catch (err) { console.error('REST sync error:', err); }
+  }, [serverUrl, session?.roomCode]);
 
   // ── Socket connection ──────────────────────────────
   useEffect(() => {
@@ -36,6 +52,7 @@ export function useSocket(serverUrl, session) {
 
     socket.on('connect', () => {
       setConnected(true);
+      setIsSleeping(false);
       socket.emit('join-room', { roomCode: session.roomCode, userName: session.userName });
     });
 
@@ -46,6 +63,7 @@ export function useSocket(serverUrl, session) {
 
     socket.on('reconnect', () => {
       setConnected(true);
+      setIsSleeping(false);
       socket.emit('join-room', { roomCode: session.roomCode, userName: session.userName });
     });
 
@@ -106,6 +124,74 @@ export function useSocket(serverUrl, session) {
     setIsMuted(false);
     setIncomingOffer(null);
   }, []);
+
+  // ── Idle Sleep & Reconnect Logic ─────────────────────
+  useEffect(() => {
+    if (!session) return;
+    let sleepTimer = null;
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        // Start 15s timer to sleep if idle (not in a call)
+        if (callState === 'idle') {
+          sleepTimer = setTimeout(() => {
+            if (socketRef.current && socketRef.current.connected) {
+              console.log('💤 App idle in background. Disconnecting socket to save battery.');
+              socketRef.current.disconnect();
+              setIsSleeping(true);
+            }
+          }, 15000);
+        }
+      } else if (document.visibilityState === 'visible') {
+        if (sleepTimer) clearTimeout(sleepTimer);
+        
+        // If we were sleeping or disconnected, wake up!
+        if (socketRef.current && (!socketRef.current.connected || isSleeping)) {
+          console.log('☀️ App woken up. Reconnecting socket and syncing...');
+          socketRef.current.connect();
+          setIsSleeping(false);
+          syncMessagesFromRest();
+        }
+        markAsRead();
+      }
+    };
+
+    const handleOnline = () => {
+      if (socketRef.current && !socketRef.current.connected && document.visibilityState === 'visible') {
+        socketRef.current.connect();
+        setIsSleeping(false);
+        syncMessagesFromRest();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('online', handleOnline);
+
+    return () => {
+      if (sleepTimer) clearTimeout(sleepTimer);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('online', handleOnline);
+    };
+  }, [session, callState, isSleeping, syncMessagesFromRest]);
+
+  // ── Unread Message Tracking ──────────────────────────
+  const markAsRead = useCallback(() => {
+    if (!session?.roomCode) return;
+    localStorage.setItem(`fl_last_read_${session.roomCode}`, String(Date.now()));
+    setUnreadCount(0);
+  }, [session?.roomCode]);
+
+  useEffect(() => {
+    if (!session?.roomCode || messages.length === 0) return;
+    const lastRead = Number(localStorage.getItem(`fl_last_read_${session.roomCode}`) || 0);
+
+    if (document.visibilityState === 'visible') {
+      markAsRead();
+    } else {
+      const unread = messages.filter((m) => m.time > lastRead && m.from !== session.userName).length;
+      setUnreadCount(unread);
+    }
+  }, [messages, session?.roomCode, session?.userName, markAsRead]);
 
   const createPC = useCallback(() => {
     const pc = new RTCPeerConnection(ICE_SERVERS);
@@ -178,5 +264,23 @@ export function useSocket(serverUrl, session) {
     if (socketRef.current && text.trim()) socketRef.current.emit('chat-message', { text: text.trim() });
   }, []);
 
-  return { connected, otherUser, messages, sendMessage, callState, startCall, answerCall, rejectCall, endCall, toggleMute, isMuted, joinError };
+  return {
+    connected,
+    isSleeping,
+    otherUser,
+    messages,
+    sendMessage,
+    callState,
+    startCall,
+    answerCall,
+    rejectCall,
+    endCall,
+    toggleMute,
+    isMuted,
+    joinError,
+    unreadCount,
+    markAsRead,
+    pushPermission: permission,
+    requestPushPermission: requestPermissionAndRegister,
+  };
 }

@@ -4,6 +4,7 @@ const { Server } = require('socket.io');
 const cors = require('cors');
 const path = require('path');
 const crypto = require('crypto');
+const { sendPushNotification } = require('./services/fcm');
 
 const app = express();
 const server = http.createServer(app);
@@ -49,8 +50,16 @@ function generateRoomCode() {
 // REST endpoint: create a room
 app.post('/api/room', (req, res) => {
   const code = generateRoomCode();
-  rooms[code] = { users: {}, messages: [] };
+  rooms[code] = { users: {}, messages: [], fcmTokens: {} };
   res.json({ code });
+});
+
+// REST endpoint: get room messages (for wakeup sync)
+app.get('/api/room/:code/messages', (req, res) => {
+  const code = req.params.code.toUpperCase();
+  const room = rooms[code];
+  if (!room) return res.status(404).json({ error: 'Room not found' });
+  res.json({ messages: room.messages });
 });
 
 // REST endpoint: check if room exists and has space
@@ -73,8 +82,9 @@ io.on('connection', (socket) => {
 
     // Auto-create room if it doesn't exist
     if (!rooms[code]) {
-      rooms[code] = { users: {}, messages: [] };
+      rooms[code] = { users: {}, messages: [], fcmTokens: {} };
     }
+    if (!rooms[code].fcmTokens) rooms[code].fcmTokens = {};
 
     const room = rooms[code];
     const currentUsers = Object.keys(room.users).length;
@@ -108,6 +118,17 @@ io.on('connection', (socket) => {
     broadcastRoomStatus(code);
   });
 
+  // Register FCM Token
+  socket.on('register-fcm-token', ({ token }) => {
+    if (!socket.roomCode || !socket.userName) return;
+    const room = rooms[socket.roomCode];
+    if (room && token) {
+      if (!room.fcmTokens) room.fcmTokens = {};
+      room.fcmTokens[socket.userName] = token;
+      console.log(`Registered FCM token for ${socket.userName} in room ${socket.roomCode}`);
+    }
+  });
+
   // Chat
   socket.on('chat-message', (msg) => {
     if (!socket.roomCode || !socket.userName) return;
@@ -124,6 +145,26 @@ io.on('connection', (socket) => {
     if (room.messages.length > MAX_MESSAGES) room.messages.shift();
 
     io.to(socket.roomCode).emit('chat-message', message);
+
+    // If other user is offline/sleeping, send push notification
+    const targetSocketId = getOtherSocket(socket);
+    if (!targetSocketId && room.fcmTokens) {
+      for (const [userName, token] of Object.entries(room.fcmTokens)) {
+        if (userName !== socket.userName && token) {
+          sendPushNotification(token, {
+            title: `Message from ${socket.userName}`,
+            body: msg.text,
+            data: {
+              type: 'chat',
+              roomCode: socket.roomCode,
+              from: socket.userName,
+              messageId: message.id,
+              time: message.time,
+            },
+          });
+        }
+      }
+    }
   });
 
   // ── WebRTC signaling ────────────────────────────────
@@ -131,6 +172,26 @@ io.on('connection', (socket) => {
     const target = getOtherSocket(socket);
     if (target) {
       io.to(target).emit('incoming-call', { from: socket.userName, offer: data.offer });
+    } else {
+      // Target is sleeping/offline -> send emergency incoming call push!
+      const room = rooms[socket.roomCode];
+      if (room && room.fcmTokens) {
+        for (const [userName, token] of Object.entries(room.fcmTokens)) {
+          if (userName !== socket.userName && token) {
+            console.log(`Waking ${userName} for incoming call from ${socket.userName}`);
+            sendPushNotification(token, {
+              title: `📞 Incoming Voice Call`,
+              body: `${socket.userName} is calling you on Keryx!`,
+              data: {
+                type: 'call',
+                roomCode: socket.roomCode,
+                from: socket.userName,
+                offer: JSON.stringify(data.offer),
+              },
+            });
+          }
+        }
+      }
     }
   });
 

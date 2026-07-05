@@ -14,6 +14,7 @@ export default function App() {
   const [session, setSession] = useState(null); // { roomCode, userName }
   const {
     connected,
+    isSleeping,
     otherUser,
     messages,
     sendMessage,
@@ -25,6 +26,10 @@ export default function App() {
     toggleMute,
     isMuted,
     joinError,
+    unreadCount,
+    markAsRead,
+    pushPermission,
+    requestPushPermission,
   } = useSocket(SERVER_URL, session);
 
   // Persist session in localStorage
@@ -49,25 +54,56 @@ export default function App() {
     return <JoinRoom serverUrl={SERVER_URL} onJoin={setSession} />;
   }
 
+  const getStatusText = () => {
+    if (isSleeping) return 'Sleeping 💤 (Push active)';
+    if (!connected) return 'Connecting…';
+    if (otherUser) return 'Online 🟢';
+    return 'Offline / Sleeping 💤 (Will wake via Push)';
+  };
+
   return (
     <div className="app">
       <header className="app-header">
+        {pushPermission === 'default' && (
+          <div className="push-permission-banner" style={{
+            background: '#ff9800', color: '#000', padding: '8px 12px', fontSize: '13px',
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontWeight: '500'
+          }}>
+            <span>🔔 Enable notifications to wake app for incoming calls & texts</span>
+            <button
+              onClick={requestPushPermission}
+              style={{ background: '#000', color: '#fff', border: 'none', padding: '4px 10px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
+            >
+              Enable Push
+            </button>
+          </div>
+        )}
         <div className="header-top">
           <button className="header-btn leave-btn" onClick={handleLeave}>
             <svg width="8" height="13" viewBox="0 0 8 13" fill="none"><path d="M7 1L1.5 6.5L7 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
             Leave
           </button>
-          <div className="header-center">
-            <h1>{otherUser || 'Waiting…'}</h1>
-            <span className={`header-status ${otherUser ? 'online' : ''} ${!connected ? 'connecting' : ''}`}>
-              {!connected ? 'Connecting…' : otherUser ? 'Online' : 'Waiting for partner'}
+          <div className="header-center" onClick={markAsRead}>
+            <h1>
+              {otherUser || 'Partner'}
+              {unreadCount > 0 && (
+                <span style={{
+                  background: '#ff3b30', color: 'white', fontSize: '12px', padding: '2px 8px',
+                  borderRadius: '12px', marginLeft: '8px', verticalAlign: 'middle', fontWeight: 'bold'
+                }}>
+                  {unreadCount} new
+                </span>
+              )}
+            </h1>
+            <span className={`header-status ${otherUser ? 'online' : ''} ${!connected || isSleeping ? 'connecting' : ''}`}>
+              {getStatusText()}
             </span>
           </div>
           <button
             className="header-btn call-btn"
             onClick={startCall}
-            disabled={!otherUser || callState !== 'idle'}
-            title={otherUser ? 'Voice call' : 'No one to call'}
+            disabled={!connected || callState !== 'idle'}
+            title={otherUser ? 'Voice call' : 'Call (Will wake partner via Push)'}
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
           </button>
@@ -80,7 +116,7 @@ export default function App() {
       {callState !== 'idle' && (
         <CallScreen
           callState={callState}
-          otherName={otherUser || 'Partner'}
+          otherName={otherUser || 'Partner (Waking via Push...)'}
           onAnswer={answerCall}
           onReject={rejectCall}
           onEnd={endCall}

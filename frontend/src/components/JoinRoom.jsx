@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 export default function JoinRoom({ serverUrl, onJoin }) {
   const [name, setName] = useState('Mom');
@@ -6,10 +6,38 @@ export default function JoinRoom({ serverUrl, onJoin }) {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showKey, setShowKey] = useState(false);
+  const [activeUsers, setActiveUsers] = useState([]);
+
+  useEffect(() => {
+    const fetchActive = async () => {
+      try {
+        const res = await fetch(`${serverUrl}/api/active-users`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.activeUsers) {
+            setActiveUsers(data.activeUsers);
+            // Automatically select the available identity if one is already in use
+            if (data.activeUsers.includes('Mom') && !data.activeUsers.includes('Brother')) {
+              setName('Brother');
+            } else if (data.activeUsers.includes('Brother') && !data.activeUsers.includes('Mom')) {
+              setName('Mom');
+            }
+          }
+        }
+      } catch (err) {}
+    };
+    fetchActive();
+    const interval = setInterval(fetchActive, 4000);
+    return () => clearInterval(interval);
+  }, [serverUrl]);
 
   const handleEnter = async (e) => {
     if (e) e.preventDefault();
     if (!name) { setError('Please select who you are (Mom or Brother)'); return; }
+    if (activeUsers.includes(name)) {
+      setError(`${name} is already online on another device! Please choose the other option.`);
+      return;
+    }
     if (!familyKey.trim()) { setError('Please enter the Family Key'); return; }
 
     setLoading(true);
@@ -30,6 +58,12 @@ export default function JoinRoom({ serverUrl, onJoin }) {
         return;
       }
 
+      if (res.status === 409) {
+        setError(data.error || `${name} is already online on another device!`);
+        setLoading(false);
+        return;
+      }
+
       if (!res.ok || !data.success) {
         setError(data.error || 'Invalid Family Key. Please try again.');
         setLoading(false);
@@ -43,6 +77,9 @@ export default function JoinRoom({ serverUrl, onJoin }) {
       setLoading(false);
     }
   };
+
+  const momActive = activeUsers.includes('Mom');
+  const brotherActive = activeUsers.includes('Brother');
 
   return (
     <div className="join-screen">
@@ -63,33 +100,51 @@ export default function JoinRoom({ serverUrl, onJoin }) {
             <div style={{ display: 'flex', gap: '12px', marginTop: '6px' }}>
               <button
                 type="button"
-                onClick={() => setName('Mom')}
+                onClick={() => {
+                  if (momActive) setError('Mom is already online on another phone! Select Brother.');
+                  else { setName('Mom'); setError(''); }
+                }}
+                disabled={momActive}
                 style={{
                   flex: 1, padding: '14px 10px', borderRadius: '12px', border: '2px solid',
                   borderColor: name === 'Mom' ? '#007aff' : '#3a3a3c',
-                  background: name === 'Mom' ? '#007aff20' : '#2c2c2e',
-                  color: name === 'Mom' ? '#fff' : '#8e8e93',
-                  fontWeight: 'bold', cursor: 'pointer', fontSize: '16px',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
-                  transition: 'all 0.2s ease'
+                  background: momActive ? '#1c1c1e' : (name === 'Mom' ? '#007aff20' : '#2c2c2e'),
+                  color: momActive ? '#48484a' : (name === 'Mom' ? '#fff' : '#8e8e93'),
+                  fontWeight: 'bold', cursor: momActive ? 'not-allowed' : 'pointer', fontSize: '15px',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                  transition: 'all 0.2s ease', opacity: momActive ? 0.6 : 1
                 }}
               >
-                <span>👩</span> Mom {name === 'Mom' && '🟢'}
+                <span>👩</span> Mom
+                {momActive ? (
+                  <span style={{ fontSize: '10px', background: '#ff3b30', color: 'white', padding: '2px 6px', borderRadius: '6px', textTransform: 'uppercase' }}>In Use</span>
+                ) : (
+                  name === 'Mom' && '🟢'
+                )}
               </button>
               <button
                 type="button"
-                onClick={() => setName('Brother')}
+                onClick={() => {
+                  if (brotherActive) setError('Brother is already online on another phone! Select Mom.');
+                  else { setName('Brother'); setError(''); }
+                }}
+                disabled={brotherActive}
                 style={{
                   flex: 1, padding: '14px 10px', borderRadius: '12px', border: '2px solid',
                   borderColor: name === 'Brother' ? '#007aff' : '#3a3a3c',
-                  background: name === 'Brother' ? '#007aff20' : '#2c2c2e',
-                  color: name === 'Brother' ? '#fff' : '#8e8e93',
-                  fontWeight: 'bold', cursor: 'pointer', fontSize: '16px',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
-                  transition: 'all 0.2s ease'
+                  background: brotherActive ? '#1c1c1e' : (name === 'Brother' ? '#007aff20' : '#2c2c2e'),
+                  color: brotherActive ? '#48484a' : (name === 'Brother' ? '#fff' : '#8e8e93'),
+                  fontWeight: 'bold', cursor: brotherActive ? 'not-allowed' : 'pointer', fontSize: '15px',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                  transition: 'all 0.2s ease', opacity: brotherActive ? 0.6 : 1
                 }}
               >
-                <span>👦</span> Brother {name === 'Brother' && '🟢'}
+                <span>👦</span> Brother
+                {brotherActive ? (
+                  <span style={{ fontSize: '10px', background: '#ff3b30', color: 'white', padding: '2px 6px', borderRadius: '6px', textTransform: 'uppercase' }}>In Use</span>
+                ) : (
+                  name === 'Brother' && '🟢'
+                )}
               </button>
             </div>
           </div>

@@ -99,6 +99,13 @@ function sendAdminNotification(messageText) {
 
 // ── REST Endpoints ─────────────────────────────────────
 
+// Public endpoint to check currently connected identities
+app.get('/api/active-users', (req, res) => {
+  const room = rooms['FAMILY'];
+  const activeUsers = room ? Object.values(room.users) : [];
+  res.json({ activeUsers });
+});
+
 // Family Key Verification -> issues 30-day session token
 app.post('/api/verify-key', async (req, res) => {
   const { familyKey, userName } = req.body;
@@ -107,6 +114,15 @@ app.post('/api/verify-key', async (req, res) => {
   const cleanUserName = typeof userName === 'string' ? userName.trim() : '';
   if (!cleanUserName || !['Mom', 'Brother'].includes(cleanUserName)) {
     return res.status(400).json({ error: 'Please select a valid identity (Mom or Brother)' });
+  }
+
+  // Prevent selecting an identity that is currently online on another socket
+  const room = rooms['FAMILY'];
+  if (room && Object.values(room.users).includes(cleanUserName)) {
+    const otherName = cleanUserName === 'Mom' ? 'Brother' : 'Mom';
+    return res.status(409).json({
+      error: `${cleanUserName} is already active on another device! Are you ${otherName}?`
+    });
   }
 
   // Check rate limit (max 5 failed attempts per hour per IP)

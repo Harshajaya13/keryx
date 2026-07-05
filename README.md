@@ -95,11 +95,13 @@ Despite its tiny footprint, Keryx packs the essentials needed for everyday famil
 
 * 💬 **Lightweight Real-Time Chat:** Clean, instant messaging without the bloat.
 * 📞 **Peer-to-Peer Voice Calls:** Crystal-clear WebRTC audio calls that connect directly between devices.
+* 🕊️ **Event-Driven Story Loader:** A heartwarming, role-based startup story (Mom Bird flying home to Brother Chick) that completes the exact millisecond your websocket connects—eliminating artificial loading spinners and uptime monitoring bots.
+* 🔊 **Continuous Background Audio Streams:** Uses HTML5 audio looping for call ringtones and message chimes so web browsers never throttle or silence alarms when switching tabs.
+* 🔔 **Guaranteed OS Notification Banners:** Powered by ServiceWorker Registration to reliably trigger system desktop/phone popup notifications and vibrations for incoming calls and texts even when out of the tab.
 * 🚨 **Emergency Mode:** A dedicated high-priority beacon that cuts through background noise with red alert banners and instant admin push notifications.
-* 💤 **Sleeping Architecture:** Automatically disconnects idle sockets after 15 seconds in the background to preserve battery and RAM.
-* 🔔 **Push Notifications:** Powered by Firebase Cloud Messaging to reliably wake sleeping devices for calls and texts.
+* 💤 **Sleeping Architecture:** Follows our strict sleep philosophy—stays connected while Chrome is open (even when switching tabs or minimizing), and sleeps naturally when Chrome closes.
 * 📦 **SQLite Persistence:** Uses zero-compilation WebAssembly SQLite (`sql.js`) for rock-solid, cross-platform message and call log storage.
-* 🔒 **Family Key Security:** Protected by strict bcrypt password hashing and 30-day cryptographically signed session tokens. No random visitors allowed.
+* 🔒 **Family Key Security:** Protected by strict bcrypt password hashing, 30-day cryptographically signed session tokens, and automatic lingering socket cleanup so family members never get locked out.
 * ✓✓ **Smart Read Receipts:** Real-time tracking for Sent (`✓`), Delivered (`✓✓`), and Read (`✓✓` in vibrant green).
 * 🟢 **Presence & Last Seen:** Live indicators showing when your partner is Online, In Call, Sleeping, or when they were last seen.
 * ✍️ **Live Typing Indicator:** Empathetic visual feedback (`"✍️ Partner is typing..."`) during active conversations.
@@ -161,6 +163,7 @@ Just communication.
 * **Phase 2 — Sleeping Architecture:** Integrated Firebase Cloud Messaging (FCM), device token registration, unread message badges, and idle-socket disconnection.
 * **Phase 3 — Reliability and Persistence:** Implemented WebAssembly SQLite (`sql.js`), bcrypt Family Key authentication, presence tracking, read receipts, call logs, and Emergency Mode.
 * **Phase 4 — Production Hardening:** Added automatic offline message queuing, HTTP security headers (CSP, HSTS), user-friendly English error wording, and zero-leak WebRTC resource cleanup.
+* **Phase 5 — Storytelling & Background Reliability:** Created an emotional, role-based event-driven startup story (Mom Bird & Brother Chick), HTML5 audio media streams for background ringtones and message chimes, and ServiceWorker registration for guaranteed system notifications across tab switches.
 
 ---
 
